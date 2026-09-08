@@ -234,7 +234,7 @@ fn wire_dialogs(
                 session.channels.remove(i);
                 renumber_channel_slice(&mut session.channels);
                 session.selected = if session.channels.is_empty() {
-                    0
+                    -1
                 } else {
                     (session.selected.min(session.channels.len() as i32 - 1)).max(0)
                 };
@@ -245,8 +245,6 @@ fn wire_dialogs(
                     refresh_channel_window_lists(&chw, &a);
                     if let Some(c) = channel_configs(&a).get(selected as usize) {
                         set_chan_form(&chw, c, &a);
-                    } else {
-                        set_chan_form(&chw, &default_channel(), &a);
                     }
                 }
             }

@@ -16,6 +16,13 @@ fn wire_playback(
     sim_panel_window: &SimPanelWindow,
     sim_prop_window: &SimPropWindow,
 ) {
+    wire_playback_window(app, playback_window);
+}
+
+fn wire_playback_window(
+    app: Rc<std::cell::RefCell<App>>,
+    playback_window: &PlaybackWindow,
+) {
     // ---------------- 数据回放窗口 ----------------
     {
         let app = app.clone();
@@ -28,8 +35,11 @@ fn wire_playback(
                 let mut dlg = rfd::AsyncFileDialog::new()
                     .add_filter("回放文件 (CSV/ASC/BLF)", &["csv", "asc", "blf"]);
                 dlg = dlg.set_parent(&w.window().window_handle());
-                let Some(files) = dlg.pick_files().await else { return };
-                let paths: Vec<std::path::PathBuf> = files.iter().map(|f| f.path().to_path_buf()).collect();
+                let Some(files) = dlg.pick_files().await else {
+                    return;
+                };
+                let paths: Vec<std::path::PathBuf> =
+                    files.iter().map(|f| f.path().to_path_buf()).collect();
                 let worker = app.borrow().worker_tx.clone();
                 std::thread::spawn(move || {
                     let mut parsed = Vec::new();
@@ -44,10 +54,9 @@ fn wire_playback(
                                     .unwrap_or(path_text);
                                 parsed.push((name, frames));
                             }
-                            Err(error) => errors.push(format!(
-                                "载入回放文件失败 {}: {error}",
-                                path.display()
-                            )),
+                            Err(error) => {
+                                errors.push(format!("载入回放文件失败 {}: {error}", path.display()))
+                            }
                         }
                     }
                     let _ = worker.send(WorkerEvent::PlaybackParsed {
@@ -71,8 +80,11 @@ fn wire_playback(
                 let mut dlg = rfd::AsyncFileDialog::new()
                     .add_filter("回放文件 (CSV/ASC/BLF)", &["csv", "asc", "blf"]);
                 dlg = dlg.set_parent(&w.window().window_handle());
-                let Some(files) = dlg.pick_files().await else { return };
-                let paths: Vec<std::path::PathBuf> = files.iter().map(|f| f.path().to_path_buf()).collect();
+                let Some(files) = dlg.pick_files().await else {
+                    return;
+                };
+                let paths: Vec<std::path::PathBuf> =
+                    files.iter().map(|f| f.path().to_path_buf()).collect();
                 let worker = app.borrow().worker_tx.clone();
                 std::thread::spawn(move || {
                     let mut parsed = Vec::new();
@@ -87,10 +99,9 @@ fn wire_playback(
                                     .unwrap_or(path_text);
                                 parsed.push((name, frames));
                             }
-                            Err(error) => errors.push(format!(
-                                "添加回放文件失败 {}: {error}",
-                                path.display()
-                            )),
+                            Err(error) => {
+                                errors.push(format!("添加回放文件失败 {}: {error}", path.display()))
+                            }
                         }
                     }
                     let _ = worker.send(WorkerEvent::PlaybackParsed {
@@ -180,12 +191,29 @@ fn wire_playback(
         playback_window.on_play(move || {
             let Some(w) = pw.upgrade() else { return };
             let mut a = app.borrow_mut();
-            if !a.license_allows("playback") { return; }
-            let online = w.get_online();
+            if !a.license_allows("playback") {
+                return;
+            }
+            let online_requested = w.get_online();
+            let online = playback_online_mode(online_requested, a.connected);
+            if online_requested && !online {
+                w.set_online(false);
+                let message = if a.lang_en {
+                    "No CAN hardware is connected; switched to offline playback"
+                } else {
+                    "未连接 CAN 硬件，已自动切换为离线回放"
+                };
+                a.log(message);
+            }
             let speed = if w.get_speed_fast() {
                 0.0
             } else {
-                w.get_rate().to_string().trim().parse::<f64>().unwrap_or(1.0).max(0.01)
+                w.get_rate()
+                    .to_string()
+                    .trim()
+                    .parse::<f64>()
+                    .unwrap_or(1.0)
+                    .max(0.01)
             };
             let _ = a.cmd.send(Cmd::PlaybackPlay {
                 online,

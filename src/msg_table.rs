@@ -9,6 +9,61 @@ use slint::{Model, ModelRc, VecModel};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+#[derive(Default)]
+pub(crate) struct TableCache {
+    config: u64,
+    latest: HashMap<u64, FrameRec>,
+    recent: std::collections::VecDeque<FrameRec>,
+    scanned_no: u64,
+    trace_limit: usize,
+    blocks: HashMap<u64, (u64, Vec<MsgRow>, Vec<DisplayItem>)>,
+    pub(crate) refresh_ms: f64,
+    pub(crate) peak_ms: f64,
+    pub(crate) updated_rows: usize,
+    pub(crate) ui_ms: f64,
+    pub(crate) ui_peak_ms: f64,
+}
+
+impl TableCache {
+    fn sync_latest(
+        &mut self,
+        trace: &std::collections::VecDeque<FrameRec>,
+        accept: impl Fn(&FrameRec) -> bool,
+    ) -> usize {
+        let arrivals: Vec<_> = trace
+            .iter()
+            .rev()
+            .take_while(|r| r.no > self.scanned_no)
+            .collect();
+        let inspected = arrivals.len();
+        for r in arrivals.into_iter().rev() {
+            if accept(r) {
+                self.recent.push_back(r.clone());
+                if self.recent.len() > DISPLAY_CAP {
+                    self.recent.pop_front();
+                }
+                match self.latest.entry(r.key) {
+                    std::collections::hash_map::Entry::Occupied(mut entry) => {
+                        if entry.get().no < r.no {
+                            entry.insert(r.clone());
+                        }
+                    }
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(r.clone());
+                    }
+                }
+            }
+        }
+        self.scanned_no = trace.back().map_or(0, |r| r.no);
+        let oldest = trace.front().map_or(u64::MAX, |r| r.no);
+        self.latest.retain(|_, r| r.no >= oldest);
+        while self.recent.front().is_some_and(|r| r.no < oldest) {
+            self.recent.pop_front();
+        }
+        inspected
+    }
+}
+
 fn sort_decoded_for_display(signals: &mut [Decoded]) {
     signals.sort_by(|left, right| {
         left.start_bit
@@ -41,28 +96,28 @@ pub(crate) fn make_msgrow(
     } else {
         "Data"
     };
-    let cells: Vec<ByteCell> = r
-        .data
-        .iter()
-        .enumerate()
-        .map(|(i, b)| ByteCell {
-            hex: format!("{b:02X}").into(),
-            hot: hot.get(i).copied().unwrap_or(false),
-        })
-        .collect();
-    // pre-format hex with a newline every 16 bytes, used to wrap long CAN FD payloads
-    let data_text: String = r
-        .data
-        .chunks(16)
-        .map(|chunk| {
-            chunk
-                .iter()
-                .map(|b| format!("{b:02X}"))
-                .collect::<Vec<_>>()
-                .join(" ")
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    thread_local! {
+        static BYTE_HEX: Vec<slint::SharedString> = (0..=255u8).map(|b| format!("{b:02X}").into()).collect();
+    }
+    let cells: Vec<ByteCell> = BYTE_HEX.with(|hex| {
+        r.data
+            .iter()
+            .enumerate()
+            .map(|(i, &b)| ByteCell {
+                hex: hex[b as usize].clone(),
+                hot: hot.get(i).copied().unwrap_or(false),
+            })
+            .collect()
+    });
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut data_text = String::with_capacity(r.data.len() * 3);
+    for (i, &byte) in r.data.iter().enumerate() {
+        if i != 0 {
+            data_text.push(if i % 16 == 0 { '\n' } else { ' ' });
+        }
+        data_text.push(HEX[(byte >> 4) as usize] as char);
+        data_text.push(HEX[(byte & 15) as usize] as char);
+    }
     MsgRow {
         no: r.no.to_string().into(),
         time: match time_mode {
@@ -198,11 +253,9 @@ pub(crate) fn cmp_rec(a: &FrameRec, b: &FrameRec, col: i32) -> std::cmp::Orderin
 
 /// Render signature: changes whenever any input affecting the table changes, else the
 /// whole-table rebuild is skipped.
-pub(crate) fn msg_view_signature(a: &App) -> u64 {
+fn view_config_signature(a: &App) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    a.no_counter.hash(&mut h); // new frame arrived
-    a.trace.len().hash(&mut h); // cleared / ring-buffer eviction
     a.mode_trace.hash(&mut h);
     a.sort_col.hash(&mut h);
     a.sort_desc.hash(&mut h);
@@ -216,6 +269,7 @@ pub(crate) fn msg_view_signature(a: &App) -> u64 {
     a.filter.data.hash(&mut h);
     a.filter.dir_filter.hash(&mut h); // 方向过滤(此前漏入签名→工程加载只改方向时表不刷新)
     a.time_mode.hash(&mut h); // 时间显示模式(相对/绝对/系统)切换需重建
+    a.capture_wall_epoch.map(f64::to_bits).hash(&mut h);
     // expanded set
     a.expanded_keys.len().hash(&mut h);
     let exp_sum: u64 = a
@@ -225,6 +279,16 @@ pub(crate) fn msg_view_signature(a: &App) -> u64 {
     exp_sum.hash(&mut h);
     // whether a DBC is loaded (affects the Name column and expandability)
     a.dbcs.len().hash(&mut h);
+    (std::sync::Arc::as_ptr(&a.dbc_snap) as usize).hash(&mut h);
+    h.finish()
+}
+
+pub(crate) fn msg_view_signature(a: &App) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    view_config_signature(a).hash(&mut h);
+    a.no_counter.hash(&mut h);
+    a.trace.len().hash(&mut h);
     // 实时采集时混入 ~500ms 粗时间桶，使总线全静默期也能刷新"超时/陈旧"判断。
     if a.running
         && let Some(epoch) = a.capture_wall_epoch
@@ -244,37 +308,56 @@ fn should_rebuild(paused: bool, current_signature: u64, previous_signature: u64)
 /// requests a refresh. Pause freezes incoming-data refreshes but must not block filter/reset
 /// and clear operations.
 pub(crate) fn build_msg_table(a: &mut App, ui: &AppWindow) {
+    let trace_limit = match ui.get_trace_window() {
+        1 => 750,
+        2 => DISPLAY_CAP,
+        _ => 300,
+    };
+    if a.table_cache.trace_limit != trace_limit {
+        a.table_cache.trace_limit = trace_limit;
+        a.last_msg_sig = u64::MAX;
+    }
+    // Keep the visible trace stable while inspecting it. Capture and recording
+    // continue; explicit filters/sorting/clear still refresh the frozen view.
+    if a.mode_trace
+        && !a.autoscroll
+        && a.last_msg_sig != u64::MAX
+        && a.table_cache.config == view_config_signature(a)
+    {
+        return;
+    }
     let msg_sig = msg_view_signature(a);
     if !should_rebuild(a.paused, msg_sig, a.last_msg_sig) {
         return;
     }
+    let started = std::time::Instant::now();
+    let config = view_config_signature(a);
+    if a.last_msg_sig == u64::MAX
+        || a.table_cache.config != config
+        || a.trace.back().map_or(0, |r| r.no) < a.table_cache.scanned_no
+    {
+        a.table_cache.latest.clear();
+        a.table_cache.recent.clear();
+        a.table_cache.blocks.clear();
+        a.table_cache.scanned_no = 0;
+        a.table_cache.config = config;
+    }
     a.last_msg_sig = msg_sig;
+    let filter = &a.filter;
+    a.table_cache
+        .sync_latest(&a.trace, |r| filter.accept(r.id, &r.name, &r.data, r.tx));
     let (rows, items, shown) = {
         let mut recs: Vec<&FrameRec> = Vec::new();
         if a.mode_trace {
-            for r in a.trace.iter().rev() {
-                if a.filter.accept(r.id, &r.name, &r.data, r.tx) {
-                    recs.push(r);
-                    if recs.len() >= DISPLAY_CAP {
-                        break;
-                    }
-                }
-            }
-            recs.reverse();
+            recs.extend(
+                a.table_cache
+                    .recent
+                    .iter()
+                    .skip(a.table_cache.recent.len().saturating_sub(trace_limit)),
+            );
         } else {
-            let mut latest: HashMap<u64, &FrameRec> = HashMap::new();
-            let mut order: Vec<u64> = Vec::new();
-            for r in a.trace.iter() {
-                if a.filter.accept(r.id, &r.name, &r.data, r.tx)
-                    && latest.insert(r.key, r).is_none()
-                {
-                    order.push(r.key);
-                }
-            }
-            order.sort();
-            for k in order {
-                recs.push(latest[&k]);
-            }
+            recs.extend(a.table_cache.latest.values());
+            recs.sort_by_key(|r| r.key);
         }
         // sorting (only applied to the current display set)
         if a.sort_col >= 0 {
@@ -285,6 +368,9 @@ pub(crate) fn build_msg_table(a: &mut App, ui: &AppWindow) {
                 if desc { o.reverse() } else { o }
             });
         }
+        // Bound message delegates in grouped mode too; expanded signal rows remain
+        // attached to their parent rather than being cut halfway through a message.
+        recs.truncate(DISPLAY_CAP);
         let mut rows = Vec::with_capacity(recs.len());
         let mut items = Vec::with_capacity(recs.len());
         // "现在"时刻：实时采集用墙钟(总线静默也能判超时/陈旧)，否则用最新帧时间。
@@ -296,6 +382,7 @@ pub(crate) fn build_msg_table(a: &mut App, ui: &AppWindow) {
                 .unwrap_or(max_t),
             _ => max_t,
         };
+        let mut next_blocks = HashMap::new();
         for r in &recs {
             let hot: Vec<bool> = if a.mode_trace {
                 r.changed_mask.clone()
@@ -316,6 +403,29 @@ pub(crate) fn build_msg_table(a: &mut App, ui: &AppWindow) {
             // Cheap message-name lookup to decide expandability (avoid full decode per row/frame).
             let can_expand = !a.mode_trace && a.dbc_message_name_frame(r.id, r.ext).is_some();
             let expanded = can_expand && a.expanded_keys.contains(&r.key);
+            use std::hash::{Hash, Hasher};
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            r.no.hash(&mut hash);
+            hot.hash(&mut hash);
+            can_expand.hash(&mut hash);
+            expanded.hash(&mut hash);
+            (a.mode_trace && (0.0..0.15).contains(&(now_t - r.t))).hash(&mut hash);
+            (!a.mode_trace && r.delta > 0.0 && now_t - r.t > (r.delta * 3.0).max(0.1))
+                .hash(&mut hash);
+            let fingerprint = hash.finish();
+            let block_key = if a.mode_trace { r.no } else { r.key };
+            if let Some(block) = a
+                .table_cache
+                .blocks
+                .get(&block_key)
+                .filter(|b| b.0 == fingerprint)
+            {
+                rows.extend(block.1.iter().cloned());
+                items.extend(block.2.iter().cloned());
+                next_blocks.insert(block_key, block.clone());
+                continue;
+            }
+            let block_start = rows.len();
             rows.push(make_msgrow(
                 r,
                 &hot,
@@ -359,7 +469,16 @@ pub(crate) fn build_msg_table(a: &mut App, ui: &AppWindow) {
                     rows.push(make_signal_row(&display, has_valid_value));
                 }
             }
+            next_blocks.insert(
+                block_key,
+                (
+                    fingerprint,
+                    rows[block_start..].to_vec(),
+                    items[block_start..].to_vec(),
+                ),
+            );
         }
+        a.table_cache.blocks = next_blocks;
         let shown = rows.len();
         (rows, items, shown)
     };
@@ -373,18 +492,165 @@ pub(crate) fn build_msg_table(a: &mut App, ui: &AppWindow) {
     while m.row_count() > rows.len() {
         m.remove(m.row_count() - 1);
     }
+    let mut updated = 0;
     for (i, row) in rows.into_iter().enumerate() {
         if i < m.row_count() {
-            m.set_row_data(i, row);
+            if m.row_data(i).as_ref() != Some(&row) {
+                m.set_row_data(i, row);
+                updated += 1;
+            }
         } else {
             m.push(row);
+            updated += 1;
         }
     }
+    a.table_cache.updated_rows = updated;
+    a.table_cache.refresh_ms = started.elapsed().as_secs_f64() * 1000.0;
+    a.table_cache.peak_ms = a.table_cache.peak_ms.max(a.table_cache.refresh_ms);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn frame(no: u64, key: u64, value: u8) -> FrameRec {
+        FrameRec {
+            no,
+            key,
+            t: no as f64 * 0.001,
+            ch: 1,
+            tx: false,
+            id: key as u32,
+            ext: false,
+            fd: false,
+            brs: false,
+            remote: false,
+            error: false,
+            data: vec![value],
+            delta: 0.01,
+            count: no,
+            changed_mask: vec![false],
+            name: String::new(),
+        }
+    }
+
+    #[test]
+    fn grouped_refresh_scans_only_arrivals_and_expires_evicted_matches() {
+        let mut cache = TableCache::default();
+        let mut trace: std::collections::VecDeque<_> = (1..=100_000)
+            .map(|no| frame(no, no % 200, (no % 2) as u8))
+            .collect();
+        assert_eq!(cache.sync_latest(&trace, |_| true), 100_000);
+        assert_eq!(cache.latest.len(), 200);
+        assert_eq!(cache.sync_latest(&trace, |_| true), 0);
+        trace.pop_front();
+        trace.push_back(frame(100_001, 1, 7));
+        assert_eq!(cache.sync_latest(&trace, |_| true), 1);
+        assert_eq!(cache.latest[&1].data, vec![7]);
+        trace.clear();
+        cache.sync_latest(&trace, |_| true);
+        assert!(cache.latest.is_empty());
+    }
+
+    #[test]
+    fn fd_hex_render_preserves_all_bytes_and_highlights() {
+        let mut rec = frame(1, 256, 0);
+        rec.data = (0..64).collect();
+        let mut hot = vec![false; 64];
+        hot[63] = true;
+        let row = make_msgrow(&rec, &hot, false, false, rec.t, true, 0, None);
+        assert_eq!(row.data_bytes.row_count(), 64);
+        assert_eq!(row.data_bytes.row_data(63).unwrap().hex.as_str(), "3F");
+        assert!(row.data_bytes.row_data(63).unwrap().hot);
+        assert_eq!(row.data_text.lines().count(), 4);
+        assert_eq!(
+            row.data_text.lines().next().unwrap(),
+            "00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F"
+        );
+    }
+
+    #[test]
+    fn grouped_filter_keeps_latest_matching_frame_until_evicted() {
+        let mut cache = TableCache::default();
+        let mut trace = std::collections::VecDeque::from(vec![frame(1, 7, 1), frame(2, 7, 0)]);
+        cache.sync_latest(&trace, |r| r.data[0] == 1);
+        assert_eq!(cache.latest[&7].no, 1);
+        trace.push_back(frame(3, 7, 0));
+        cache.sync_latest(&trace, |r| r.data[0] == 1);
+        assert_eq!(cache.latest[&7].no, 1);
+        trace.pop_front();
+        cache.sync_latest(&trace, |r| r.data[0] == 1);
+        assert!(cache.latest.is_empty());
+    }
+
+    #[test]
+    fn incremental_views_match_full_scan_across_ring_rollover() {
+        let mut cache = TableCache::default();
+        let mut trace = std::collections::VecDeque::new();
+        for batch in 0..80_u64 {
+            for n in 1..=73 {
+                let no = batch * 73 + n;
+                trace.push_back(frame(no, no % 239, (no % 7) as u8));
+                if trace.len() > 2000 {
+                    trace.pop_front();
+                }
+            }
+            let accept = |r: &FrameRec| r.data[0] != 3;
+            assert_eq!(cache.sync_latest(&trace, accept), 73);
+            let mut expected = HashMap::new();
+            for r in trace.iter().filter(|r| accept(r)) {
+                expected.insert(r.key, r.no);
+            }
+            assert_eq!(
+                cache
+                    .latest
+                    .iter()
+                    .map(|(&k, r)| (k, r.no))
+                    .collect::<HashMap<_, _>>(),
+                expected
+            );
+            let mut recent: Vec<_> = trace
+                .iter()
+                .rev()
+                .filter(|r| accept(r))
+                .take(DISPLAY_CAP)
+                .map(|r| r.no)
+                .collect();
+            recent.reverse();
+            assert_eq!(
+                cache.recent.iter().map(|r| r.no).collect::<Vec<_>>(),
+                recent
+            );
+        }
+    }
+
+    #[test]
+    fn refresh_scan_cost_evidence() {
+        let mut trace: std::collections::VecDeque<_> =
+            (1..=100_000).map(|n| frame(n, n % 200, 1)).collect();
+        let mut cache = TableCache::default();
+        cache.sync_latest(&trace, |_| true);
+        let start = std::time::Instant::now();
+        for _ in 0..200 {
+            let mut latest = HashMap::new();
+            for r in &trace {
+                latest.insert(r.key, r.no);
+            }
+            std::hint::black_box(latest);
+        }
+        let baseline = start.elapsed();
+        let start = std::time::Instant::now();
+        for n in 100_001..=100_200 {
+            trace.pop_front();
+            trace.push_back(frame(n, n % 200, 1));
+            assert_eq!(cache.sync_latest(&trace, |_| true), 1);
+        }
+        println!(
+            "200 refreshes / 100000 history: full scan {:.3} ms, incremental {:.3} ms (index only, debug build)",
+            baseline.as_secs_f64() * 1000.0,
+            start.elapsed().as_secs_f64() * 1000.0
+        );
+    }
 
     #[test]
     fn expanded_signal_places_value_in_data_column() {

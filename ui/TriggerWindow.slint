@@ -1,4 +1,5 @@
 // One-window Slint page split from the original monolithic file.
+import { ProductButton } from "design-system.slint";
 import { Button, ComboBox, LineEdit, CheckBox, TabWidget, ListView, ScrollView, VerticalBox, HorizontalBox, TextEdit } from "std-widgets.slint";
 import { ByteCell, TxByteRow, HexDataField, HexByteEditorOverlay, SimRow, MsgRow, SigRow, TxSigRow, TxRow, PbFileRow, TreeRow, ChanStat, IdStat, ChartSeries, DbcSignalRow, SignalPickRow, I18n, Theme, ColW, Cell, HCell, SortHeader, TBtn, Icon, RibbonBtn, RibbonGroup, RibbonTab, ConvTab, SimGlyph, ThemedWindow } from "common.slint";
 
@@ -8,6 +9,7 @@ export component TriggerWindow inherits ThemedWindow {
     preferred-width: 680px;
     preferred-height: 300px;
     min-width: 520px;
+    min-height: 260px;
     background: Theme.bg;
 
     in property <bool> armed: false;
@@ -84,8 +86,8 @@ export component TriggerWindow inherits ThemedWindow {
             HorizontalLayout {
                 spacing: 8px;
                 Rectangle { horizontal-stretch: 1; }
-                Button { text: I18n.en ? "Arm / Apply" : "布防 / 应用"; clicked => { root.trig-apply(); } }
-                Button { text: I18n.en ? "Disarm" : "撤防"; clicked => { root.trig-disarm(); } }
+                ProductButton { text: I18n.en ? "Arm / Apply" : "布防 / 应用"; clicked => { root.trig-apply(); } }
+                ProductButton { text: I18n.en ? "Disarm" : "撤防"; clicked => { root.trig-disarm(); } }
             }
         }
     }

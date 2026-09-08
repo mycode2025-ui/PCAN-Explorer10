@@ -155,11 +155,50 @@ fn wire_chart(
     }
     {
         let app = app.clone();
+        let uiw = ui.as_weak();
+        let chartw = chart_window.as_weak();
+        chart_window.on_chart_set_y_mode(move |mode| {
+            let mut a = app.borrow_mut();
+            a.chart_y_mode = mode.clamp(0, 2);
+            let (Some(ui), Some(cw)) = (uiw.upgrade(), chartw.upgrade()) else {
+                return;
+            };
+            refresh_chart(&a, &ui, &cw);
+        });
+    }
+    {
+        let app = app.clone();
+        chart_window.on_chart_grid_toggle(move |visible| {
+            app.borrow_mut().chart_grid = visible;
+        });
+    }
+    {
+        let app = app.clone();
+        let uiw = ui.as_weak();
+        let chartw = chart_window.as_weak();
+        chart_window.on_chart_points_toggle(move |visible| {
+            let mut a = app.borrow_mut();
+            a.chart_points = visible;
+            let (Some(ui), Some(cw)) = (uiw.upgrade(), chartw.upgrade()) else {
+                return;
+            };
+            refresh_chart(&a, &ui, &cw);
+        });
+    }
+    {
+        let app = app.clone();
         chart_window.on_clear_chart(move || {
             let mut a = app.borrow_mut();
-            a.series.clear();
+            for series in &mut a.series {
+                series.samples.clear();
+                series.cur = 0.0;
+            }
             a.chart_view = None;
-            a.log("已清空曲线");
+            a.chart_zoom_target = None;
+            a.chart_pause_view = None;
+            let frozen = a.chart_paused.then(|| a.series.clone());
+            a.chart_frozen_series = frozen;
+            a.log("已清空曲线数据，保留已选信号");
         });
     }
     // 时间轴滚轮缩
@@ -168,7 +207,7 @@ fn wire_chart(
         chart_window.on_chart_zoom(move |delta, frac| {
             let mut a = app.borrow_mut();
             // 当前窗口（未缩放则取「当前显示的数据集」全程：暂停时用冻结快照，否则用实时数据
-let (mut vmin, mut vmax) = a.chart_view.unwrap_or_else(|| {
+            let current_view = a.chart_view.unwrap_or_else(|| {
                 let src: &[Series] = if a.chart_paused {
                     a.chart_frozen_series.as_deref().unwrap_or(&a.series)
                 } else {
@@ -176,10 +215,11 @@ let (mut vmin, mut vmax) = a.chart_view.unwrap_or_else(|| {
                 };
                 chart_full_range(src)
             });
+            let (mut vmin, mut vmax) = a.chart_zoom_target.unwrap_or(current_view);
             let span = (vmax - vmin).max(1e-6);
             let center = vmin + (frac as f64).clamp(0.0, 1.0) * span;
             // delta<0（向上滚）放大，>0 缩小
-            let factor = if delta < 0.0 { 0.6 } else { 1.67 };
+            let factor = if delta < 0.0 { 0.86 } else { 1.16 };
             // 数据范围：窗口不得超出数据，否则波形挤在中间、游标按整宽走就对不
 let src: &[Series] = if a.chart_paused {
                 a.chart_frozen_series.as_deref().unwrap_or(&a.series)
@@ -201,14 +241,55 @@ new_span = new_span.min(data_span);
                 vmax = dmax;
                 vmin = dmax - new_span;
             }
-            a.chart_view = Some((vmin, vmax));
+            if a.chart_view.is_none() {
+                a.chart_view = Some(current_view);
+            }
+            a.chart_zoom_target = Some((vmin, vmax));
+        });
+    }
+    {
+        let app = app.clone();
+        chart_window.on_chart_pan(move |delta_frac| {
+            let mut a = app.borrow_mut();
+            let src: &[Series] = if a.chart_paused {
+                a.chart_frozen_series.as_deref().unwrap_or(&a.series)
+            } else {
+                &a.series
+            };
+            let data_range = chart_full_range(src);
+            let current = a.chart_zoom_target.or(a.chart_view).unwrap_or(data_range);
+            a.chart_view = Some(pan_chart_range(current, data_range, delta_frac as f64));
+            a.chart_zoom_target = None;
+        });
+    }
+    {
+        let app = app.clone();
+        chart_window.on_chart_zoom_selection(move |start_frac, end_frac| {
+            let mut a = app.borrow_mut();
+            let src: &[Series] = if a.chart_paused {
+                a.chart_frozen_series.as_deref().unwrap_or(&a.series)
+            } else {
+                &a.series
+            };
+            let data_range = chart_full_range(src);
+            let current = a.chart_zoom_target.or(a.chart_view).unwrap_or(data_range);
+            if let Some(target) =
+                selected_chart_range(current, start_frac as f64, end_frac as f64)
+            {
+                if a.chart_view.is_none() {
+                    a.chart_view = Some(current);
+                }
+                a.chart_zoom_target = Some(target);
+            }
         });
     }
     // 适应（重置缩放为全程
 {
         let app = app.clone();
         chart_window.on_chart_fit(move || {
-            app.borrow_mut().chart_view = None;
+            let mut a = app.borrow_mut();
+            a.chart_view = None;
+            a.chart_zoom_target = None;
         });
     }
     {
@@ -259,114 +340,6 @@ new_span = new_span.min(data_span);
                 let name = a.series.remove(i).name;
                 a.log(format!("已移除曲线信号 {name}"));
             }
-        });
-    }
-    {
-        let app = app.clone();
-        let cww = chart_window.as_weak();
-        chart_window.on_chart_export_csv(move || {
-            let snapshot = chart_export_snapshot(&app.borrow());
-            if snapshot.is_empty() {
-                app.borrow_mut().log("曲线为空，无可导出数据".to_string());
-                return;
-            }
-            let worker = app.borrow().worker_tx.clone();
-            let cww = cww.clone();
-            let _ = slint::spawn_local(async move {
-                let mut dlg = rfd::AsyncFileDialog::new()
-                    .add_filter("CSV", &["csv"])
-                    .set_file_name("chart_data.csv");
-                if let Some(w) = cww.upgrade() {
-                    dlg = dlg.set_parent(&w.window().window_handle());
-                }
-                let Some(file) = dlg.save_file().await else { return };
-                let path = file.path().to_path_buf();
-                spawn_chart_export(snapshot, path, false, worker);
-            });
-        });
-    }
-    // 宽表导出：时间为行、每个信号一列，按全体时间戳并集对齐（保持最近值）
-    {
-        let app = app.clone();
-        let cww = chart_window.as_weak();
-        chart_window.on_chart_export_wide_csv(move || {
-            let snapshot = chart_export_snapshot(&app.borrow());
-            if snapshot.is_empty() {
-                app.borrow_mut().log("曲线为空，无可导出数据".to_string());
-                return;
-            }
-            let worker = app.borrow().worker_tx.clone();
-            let cww = cww.clone();
-            let _ = slint::spawn_local(async move {
-                let mut dlg = rfd::AsyncFileDialog::new()
-                    .add_filter("CSV", &["csv"])
-                    .set_file_name("chart_wide.csv");
-                if let Some(w) = cww.upgrade() {
-                    dlg = dlg.set_parent(&w.window().window_handle());
-                }
-                let Some(file) = dlg.save_file().await else { return };
-                let path = file.path().to_path_buf();
-                spawn_chart_export(snapshot, path, true, worker);
-            });
-        });
-    }
-    {
-        let app = app.clone();
-        let cww = chart_window.as_weak();
-        chart_window.on_chart_sig_log_toggle(move || {
-            {
-                let mut a = app.borrow_mut();
-                if a.sig_log.is_some() {
-                    // 停止记录
-                    let flush_result = a.sig_log.take().map(|mut w| w.flush());
-                    a.sig_log_last_flush = None;
-                    if let Some(Err(error)) = flush_result {
-                        a.log(format!("停止信号记录时刷新文件失败: {error}"));
-                    } else {
-                        a.log("已停止信号记录，数据已刷新到磁盘".to_string());
-                    }
-                    return;
-                }
-                if a.series.is_empty() {
-                    a.log("请先把要记录的信号加入曲线".to_string());
-                    return;
-                }
-            }
-            // 异步对话框（见 toggle_record 注释）。
-            let app = app.clone();
-            let cww = cww.clone();
-            let _ = slint::spawn_local(async move {
-                let mut dlg = rfd::AsyncFileDialog::new()
-                    .add_filter("CSV", &["csv"])
-                    .set_file_name("signal_log.csv");
-                if let Some(w) = cww.upgrade() {
-                    dlg = dlg.set_parent(&w.window().window_handle());
-                }
-                let Some(file) = dlg.save_file().await else { return };
-                let path = file.path().to_path_buf();
-                let mut a = app.borrow_mut();
-                match std::fs::File::create(&path) {
-                    Ok(f) => {
-                        let mut w = std::io::BufWriter::new(f);
-                        match writeln!(w, "Time,Signal,Value,Unit").and_then(|_| w.flush()) {
-                            Ok(()) => {
-                                let nsig = a.series.len();
-                                a.sig_log = Some(w);
-                                a.sig_log_last_flush = Some(std::time::Instant::now());
-                                a.log(format!(
-                                    "开始信号记录(流式): {} —— 记录曲线中 {nsig} 个信号",
-                                    path.display()
-                                ));
-                            }
-                            Err(error) => a.log(format!(
-                                "初始化信号记录文件失败 {}: {error}",
-                                path.display()
-                            )),
-                        }
-                    }
-                    Err(e) => a.log(format!("无法创建记录文件: {e}")),
-                }
-            });
         });
     }
     {

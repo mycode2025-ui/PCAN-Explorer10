@@ -125,7 +125,7 @@ export component OtaWindow inherits ThemedWindow {
                         Row {
                             Text { text: "14 Group"; width: 70px; color: Theme.text; font-size: Theme.fs; vertical-alignment: center; }
                             LineEdit { text: root.uds-dtc-group; width: 95px; height: Theme.ctrl-h; edited(v) => { root.uds-dtc-group = v; } }
-                            TBtn { boxed: true; text: "Clear"; clicked => { root.uds-clear-dtc(); } }
+                            TBtn { boxed: true; text: (I18n.en ? "Clear" : "清除"); clicked => { root.uds-clear-dtc(); } }
                             Text { text: "19 Sub"; width: 70px; color: Theme.text; font-size: Theme.fs; vertical-alignment: center; }
                             LineEdit { text: root.uds-dtc-subfn; width: 50px; height: Theme.ctrl-h; edited(v) => { root.uds-dtc-subfn = v; } }
                             Text { text: "Mask"; width: 38px; color: Theme.text; font-size: Theme.fs; vertical-alignment: center; }
@@ -157,7 +157,7 @@ export component OtaWindow inherits ThemedWindow {
                         Row {
                             Text { text: "31 Routine"; width: 70px; color: Theme.text; font-size: Theme.fs; vertical-alignment: center; }
                             LineEdit { text: root.uds-routine-id; width: 95px; height: Theme.ctrl-h; edited(v) => { root.uds-routine-id = v; } }
-                            TBtn { boxed: true; text: "Start"; clicked => { root.uds-routine-start(); } }
+                            TBtn { boxed: true; text: (I18n.en ? "Start" : "启动"); clicked => { root.uds-routine-start(); } }
                         }
                         Row {
                             Text { text: "Custom"; width: 70px; color: Theme.text; font-size: Theme.fs; vertical-alignment: center; }
@@ -178,7 +178,7 @@ export component OtaWindow inherits ThemedWindow {
                     HorizontalLayout {
                         Text { text: "UDS log"; color: Theme.text; font-weight: 700; font-size: Theme.fs; vertical-alignment: center; }
                         Rectangle { horizontal-stretch: 1; }
-                        TBtn { boxed: true; text: "Clear"; clicked => { root.diag-log-clear(); } }
+                        TBtn { boxed: true; text: (I18n.en ? "Clear" : "清除"); clicked => { root.diag-log-clear(); } }
                     }
                     TextEdit { text: root.diag-log; read-only: true; vertical-stretch: 1; font-size: Theme.fs-sm; }
                 }
@@ -207,7 +207,7 @@ export component OtaWindow inherits ThemedWindow {
                         }
                         Row {
                             TBtn { boxed: true; text: "Connect FF"; clicked => { root.xcp-connect(); } }
-                            TBtn { boxed: true; text: "Status FD"; clicked => { root.xcp-status(); } }
+                            TBtn { boxed: true; text: (I18n.en ? "Status FD" : "FD 状态"); clicked => { root.xcp-status(); } }
                             TBtn { boxed: true; text: "Disconnect FE"; clicked => { root.xcp-disconnect(); } }
                         }
                         Row {
@@ -246,7 +246,7 @@ export component OtaWindow inherits ThemedWindow {
                     HorizontalLayout {
                         Text { text: "XCP log"; color: Theme.text; font-weight: 700; font-size: Theme.fs; vertical-alignment: center; }
                         Rectangle { horizontal-stretch: 1; }
-                        TBtn { boxed: true; text: "Clear"; clicked => { root.diag-log-clear(); } }
+                        TBtn { boxed: true; text: (I18n.en ? "Clear" : "清除"); clicked => { root.diag-log-clear(); } }
                     }
                     TextEdit { text: root.diag-log; read-only: true; vertical-stretch: 1; font-size: Theme.fs-sm; }
                 }
@@ -329,8 +329,8 @@ export component OtaWindow inherits ThemedWindow {
                 HorizontalLayout {
                     spacing: 8px;
                     Rectangle { horizontal-stretch: 1; }
-                    TBtn { boxed: true; text: "Stop"; clicked => { root.ota-stop(); } }
-                    TBtn { primary: true; text: "Start upgrade"; clicked => { root.ota-start(); } }
+                    TBtn { boxed: true; text: (I18n.en ? "Stop" : "停止"); clicked => { root.ota-stop(); } }
+                    TBtn { primary: true; text: (I18n.en ? "Start upgrade" : "开始升级"); clicked => { root.ota-start(); } }
                 }
             }
             Rectangle { vertical-stretch: 1; }

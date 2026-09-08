@@ -1,8 +1,16 @@
 // One-window Slint page split from the original monolithic file.
 import { Button, ComboBox, LineEdit, CheckBox, TabWidget, ListView, ScrollView, VerticalBox, HorizontalBox, TextEdit, Palette } from "std-widgets.slint";
+import { ProductDesign, ProductModal } from "design-system.slint";
 import { ByteCell, SimRow, MsgRow, SigRow, TxSigRow, TxRow, PbFileRow, TreeRow, RecentProjectRow, ChanStat, IdStat, ChartSeries, DbcSignalRow, SignalPickRow, I18n, Theme, ColW, Cell, HCell, SortHeader, TBtn, Icon, RibbonBtn, RibbonGroup, RibbonTab, ConvTab, SimGlyph } from "common.slint";
 
 export component AppWindow inherits Window {
+    property <length> responsive-gap: 12px;
+    property <length> visible-left-width: 232px;
+    changed width => {
+        root.responsive-gap = ProductDesign.page-gap(root.width);
+        root.visible-left-width = min(root.left-w, max(150px, root.width * 0.3));
+    }
+    changed left-w => { root.visible-left-width = min(root.left-w, max(150px, root.width * 0.3)); }
     title: I18n.en ? "PcanWork - CAN/CAN FD Analyzer" : "PcanWork - CAN/CAN FD 分析工具";
     icon: @image-url("logo.svg");
     preferred-width: 1320px;
@@ -114,6 +122,11 @@ export component AppWindow inherits Window {
     in-out property <float> cursor-frac;
 
     in-out property <string> f-id;
+    in property <string> filter-feedback: "";
+    in property <bool> filter-invalid: false;
+    in-out property <int> trace-window: 0;
+    in-out property <int> detail-page: 0;
+    in-out property <bool> detail-large: false;
     in-out property <string> f-name;
     in-out property <string> f-data;
     in-out property <int> dir-filter: 0; // 0=全部 1=Rx 2=Tx
@@ -336,13 +349,13 @@ export component AppWindow inherits Window {
         }
 
         // ribbon 与主体之间的间隔条，避免 ribbon 分组名贴住下一行
-        Rectangle { height: 8px; background: Theme.bg; }
+        Rectangle { height: root.responsive-gap; background: Theme.bg; }
 
         // ===================== Body =====================
         HorizontalLayout {
             // -------- left project tree --------
             Rectangle {
-                width: root.left-w;
+                width: root.visible-left-width;
                 background: Theme.panel;
                 Rectangle { width: 1px; height: 100%; x: parent.width - 1px; background: Theme.border; }
                 VerticalLayout {
@@ -463,7 +476,7 @@ export component AppWindow inherits Window {
                     pointer-event(e) => {
                         if (e.kind == PointerEventKind.down) {
                             press-x = self.absolute-position.x + self.mouse-x;
-                            press-w = root.left-w;
+                            press-w = root.visible-left-width;
                         }
                     }
                     moved => {
@@ -495,23 +508,34 @@ export component AppWindow inherits Window {
                             selected => { root.set-time-mode(self.current-index); }
                         }
                         TBtn { boxed: true; text: I18n.en ? "Columns" : "列设置"; active: root.col-panel-visible; clicked => { root.col-panel-visible = !root.col-panel-visible; } }
-                        Rectangle { width: 1px; background: Theme.border; }
+                        if root.mode-trace: ComboBox { width: 110px; model: ["Trace 300", "Trace 750", "Trace 1500"]; current-index <=> root.trace-window; }
+                        TBtn { text: I18n.en ? "Filter guide" : "筛选说明"; clicked => { root.detail-page = 2; } }
+                        Text { text: root.filter-feedback; color: root.filter-invalid ? Theme.bad : Theme.text-dim; font-size: Theme.fs-sm; vertical-alignment: center; }
+                    } }
+                }
+                Rectangle {
+                    height: Theme.ctrl-h + 10px; background: Theme.panel2;
+                    ScrollView { HorizontalLayout {
+                        padding: 4px; spacing: 3px; alignment: start;
                         Text { text: I18n.en ? "Filter" : "筛选"; vertical-alignment: center; font-size: Theme.fs; font-weight: 600; color: Theme.text-dim; }
                         Text { text: "ID:"; vertical-alignment: center; font-size: Theme.fs; }
-                        LineEdit { width: 132px; height: Theme.ctrl-h; placeholder-text: "180,100-1FF,!200"; text <=> root.f-id; }
-                        Text { text: "Name:"; vertical-alignment: center; font-size: Theme.fs; }
+                        LineEdit { width: 132px; height: Theme.ctrl-h; placeholder-text: "180 / 100-1FF"; text <=> root.f-id; accepted => { root.apply-filter(); } }
+                        Text { text: I18n.en ? "Name:" : "名称:"; vertical-alignment: center; font-size: Theme.fs; }
                         LineEdit { width: 90px; height: Theme.ctrl-h; placeholder-text: "BMS"; text <=> root.f-name; }
-                        Text { text: "Data:"; vertical-alignment: center; font-size: Theme.fs; }
+                        Text { text: I18n.en ? "Data:" : "数据:"; vertical-alignment: center; font-size: Theme.fs; }
                         LineEdit { width: 90px; height: Theme.ctrl-h; placeholder-text: "01 02"; text <=> root.f-data; }
                         Text { text: I18n.en ? "Dir:" : "方向:"; vertical-alignment: center; font-size: Theme.fs; }
                         ComboBox {
                             width: 80px; height: Theme.ctrl-h;
                             model: I18n.en ? ["All", "Rx", "Tx"] : ["全部", "Rx", "Tx"];
                             current-index <=> root.dir-filter;
-                            selected => { root.set-dir-filter(self.current-index); }
+                            selected => { /* Applied together with the other filter fields. */ }
                         }
-                        TBtn { text: I18n.en ? "Apply" : "应用筛选"; primary: true; clicked => { root.apply-filter(); } }
+                        TBtn { text: I18n.en ? "Apply" : "应用筛选"; btn-enabled: !root.filter-invalid; primary: true; clicked => { root.apply-filter(); } }
                         TBtn { text: I18n.en ? "Reset filter" : "重置筛选"; clicked => { root.clear-filter(); } }
+
+
+
                     } }
                 }
 
@@ -905,16 +929,7 @@ export component AppWindow inherits Window {
                 Text { text: (I18n.en ? "Mode: " : "模式: ") + (root.mode-trace ? "Trace" : (I18n.en ? "Group" : "分组")); font-size: Theme.fs-sm; color: Theme.text-dim; vertical-alignment: center; }
                 Text { text: (I18n.en ? "Shown " : "显示 ") + root.shown-count + (I18n.en ? " / total " : " / 总 ") + root.total-count; font-size: Theme.fs-sm; color: Theme.text-dim; vertical-alignment: center; }
                 Text { text: (I18n.en ? "Sel: " : "选中: ") + root.sel-id; font-size: Theme.fs-sm; color: Theme.text-dim; vertical-alignment: center; }
-                Text {
-                    text: root.capture-health;
-                    accessible-label: root.capture-health;
-                    max-width: 430px;
-                    overflow: elide;
-                    font-size: Theme.fs-sm;
-                    font-family: Theme.mono;
-                    color: root.capture-loss ? Theme.bad : Theme.text-dim;
-                    vertical-alignment: center;
-                }
+                TBtn { h: 22px; boxed: true; text: root.capture-loss ? (I18n.en ? "Warning / details" : "异常 / 详情") : (I18n.en ? "Diagnostics" : "运行诊断"); clicked => { root.detail-page = 1; } }
                 Rectangle { horizontal-stretch: 1; }
                 Text { text: "Rx " + root.rx-count + "  Tx " + root.tx-count + "  Err " + root.err-count; font-size: Theme.fs-sm; color: Theme.text-dim; vertical-alignment: center; }
                 Text { text: "FPS " + root.fps + (I18n.en ? "  Load " : "  负载 ") + root.bus-load; font-size: Theme.fs-sm; color: Theme.accent; vertical-alignment: center; }
@@ -1338,7 +1353,7 @@ export component AppWindow inherits Window {
         x: root.width - self.width - 18px;
         y: root.height - self.height - 30px;
         width: Math.min(400px, root.width - 36px);
-        height: Math.min(260px, root.height - 60px);
+        height: Math.min(180px, root.height - 60px);
         border-radius: 12px;
         background: Theme.shadow;
 
@@ -1394,19 +1409,19 @@ export component AppWindow inherits Window {
                         }
                     }
                 }
-                Text { text: I18n.en ? "What's new" : "更新内容"; color: Theme.text; font-size: Theme.fs-sm; font-weight: 800; }
+                TBtn { text: I18n.en ? "Read full release notes" : "查看完整更新内容"; boxed: true; clicked => { root.detail-page = 3; } }
                 Rectangle {
                     vertical-stretch: 1;
-                    min-height: 110px;
+                    min-height: 32px;
                     background: Theme.panel2;
                     border-width: 1px;
                     border-color: Theme.border;
                     border-radius: 6px;
                     ScrollView {
                         x: 0px; y: 0px; width: parent.width; height: parent.height;
-                        viewport-width: 350px;
+                        viewport-width: self.visible-width;
                         VerticalLayout {
-                            width: 350px;
+                            width: parent.visible-width;
                             padding: 8px;
                             Text {
                                 text: root.update-notes == ""
@@ -1423,8 +1438,42 @@ export component AppWindow inherits Window {
                 HorizontalLayout {
                     height: Theme.ctrl-h; spacing: 9px;
                     Rectangle { horizontal-stretch: 1; }
-                    TBtn { width: 105px; text: I18n.en ? "Gitee download" : "Gitee 下载"; boxed: true; clicked => { root.open-update-gitee(); } }
-                    TBtn { width: 112px; text: I18n.en ? "GitHub download" : "GitHub 下载"; primary: true; clicked => { root.open-update-github(); } }
+                    TBtn { width: 105px; text: I18n.en ? "Gitee download" : "Gitee 下载"; boxed: true; btn-enabled: root.update-gitee-url != ""; clicked => { root.open-update-gitee(); } }
+                    TBtn { width: 112px; text: I18n.en ? "GitHub download" : "GitHub 下载"; primary: true; btn-enabled: root.update-github-url != ""; clicked => { root.open-update-github(); } }
+                }
+            }
+        }
+    }
+
+    ProductModal {
+        open: root.detail-page > 0;
+        close-requested => { root.detail-page = 0; }
+        TouchArea { clicked => { root.detail-page = 0; } }
+        Rectangle {
+            width: min(root.detail-large ? 1000px : 640px, parent.width - 32px);
+            height: min(root.detail-large ? 760px : 440px, parent.height - 32px);
+            x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+            background: Theme.panel; border-radius: 8px; border-width: 1px; border-color: Theme.border;
+            TouchArea { }
+            VerticalLayout {
+                padding: 16px; spacing: 12px;
+                HorizontalLayout {
+                    Text { text: root.detail-page == 1 ? (I18n.en ? "Runtime diagnostics" : "运行诊断") : root.detail-page == 2 ? (I18n.en ? "Filter guide" : "筛选说明与状态") : (I18n.en ? "Release notes " : "完整更新内容 ") + root.update-version; color: Theme.text; font-weight: 700; }
+                    Rectangle { horizontal-stretch: 1; }
+                    TBtn { boxed: true; text: root.detail-large ? (I18n.en ? "Compact" : "缩小") : (I18n.en ? "Expand" : "放大"); clicked => { root.detail-large = !root.detail-large; } }
+                    TBtn { boxed: true; text: I18n.en ? "Close" : "关闭"; clicked => { root.detail-page = 0; } }
+                }
+                detail-scroll := ScrollView {
+                    viewport-width: self.visible-width;
+                    VerticalLayout {
+                        width: detail-scroll.visible-width; padding: 8px; spacing: 12px;
+                        Text {
+                            text: root.detail-page == 1 ? root.capture-health : root.detail-page == 3 ? root.update-notes : (I18n.en
+                                ? "ID is hexadecimal: 180 matches one ID; 100-1FF matches a range; separate terms with commas; !200 excludes ID 200. Empty means all.\n\nName matches a substring; BMS* matches a prefix, *BMS a suffix, !BMS excludes.\n\nData matches consecutive hex bytes, e.g. 01 02. Separate bytes with spaces. This is a filter, not a frame editor.\n\nID, Name, Data and Direction are applied together. Invalid input leaves the active filter unchanged.\n\nTrace 300/750/1500 selects the displayed rolling window only; capture and recording are unchanged. Disable auto-scroll to inspect a stable view.\n\nStatus: "
+                                : "ID 按十六进制填写：180 匹配单个 ID；100-1FF 匹配范围；逗号分隔多个条件；!200 排除 ID 200。留空匹配全部。\n\n名称按包含匹配；BMS* 匹配前缀，*BMS 匹配后缀，!BMS 排除名称。\n\nData 按连续字节匹配，例如 01 02，用空格分隔。这是筛选条件，不是报文编辑器。\n\nID、名称、Data 和方向一起点击“应用筛选”生效。输入有误时保留旧筛选，不会悄悄忽略错误。\n\nTrace 300/750/1500 仅控制实时显示窗口，不影响采集缓存与记录。关闭自动滚动后可稳定查看当前表格。\n\n当前状态：") + root.filter-feedback;
+                            wrap: word-wrap; color: Theme.text; font-size: Theme.fs;
+                        }
+                    }
                 }
             }
         }
@@ -1687,13 +1736,7 @@ export component AppWindow inherits Window {
                             : close-about-area.has-hover ? Theme.panel2 : transparent;
                         accessible-role: AccessibleRole.button;
                         accessible-label: I18n.en ? "Close" : "关闭";
-                        Text {
-                            text: "×";
-                            color: Theme.text-dim;
-                            font-size: 20px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                        Image { source: @image-url("icons/close.svg"); width: 16px; height: 16px; x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; colorize: Theme.text-dim; }
                         close-about-area := TouchArea {
                             clicked => { root.about-open = false; }
                         }
@@ -1766,7 +1809,7 @@ export component AppWindow inherits Window {
                                     height: 30px; spacing: 8px;
                                     Text {
                                         text: root.update-state == 0 ? (I18n.en ? "Updates are checked automatically at startup." : "启动时会自动检查新版本。")
-                                            : root.update-state == 1 ? (I18n.en ? "Checking Gitee, then GitHub..." : "正在检查 Gitee，失败后切换 GitHub...")
+                                            : root.update-state == 1 ? (I18n.en ? "Checking GitHub and Gitee..." : "正在同时检查 GitHub 和 Gitee...")
                                             : root.update-state == 2 ? (I18n.en ? "You are using the latest version." : "当前已是最新版本。")
                                             : root.update-state == 3 ? ((I18n.en ? "Available: " : "可用版本：") + "v" + root.update-version)
                                             : (I18n.en ? "Check failed. Please try again later." : "检查失败，请稍后重试。");
@@ -1779,8 +1822,8 @@ export component AppWindow inherits Window {
                                 if root.update-state == 3: HorizontalLayout {
                                     height: 30px; spacing: 8px;
                                     Rectangle { horizontal-stretch: 1; }
-                                    TBtn { width: 112px; h: 30px; text: I18n.en ? "Gitee download" : "Gitee 下载"; boxed: true; clicked => { root.open-update-gitee(); } }
-                                    TBtn { width: 122px; h: 30px; text: I18n.en ? "GitHub download" : "GitHub 下载"; primary: true; clicked => { root.open-update-github(); } }
+                                    TBtn { width: 112px; h: 30px; text: I18n.en ? "Gitee download" : "Gitee 下载"; boxed: true; btn-enabled: root.update-gitee-url != ""; clicked => { root.open-update-gitee(); } }
+                                    TBtn { width: 122px; h: 30px; text: I18n.en ? "GitHub download" : "GitHub 下载"; primary: true; btn-enabled: root.update-github-url != ""; clicked => { root.open-update-github(); } }
                                 }
                             }
                         }

@@ -510,6 +510,7 @@ fn wire_main(app: Rc<std::cell::RefCell<App>>, ui: &AppWindow, child_windows: Ch
         ui.on_toggle_autoscroll(move || {
             let mut a = app.borrow_mut();
             a.autoscroll = !a.autoscroll;
+            a.last_msg_sig = u64::MAX;
         });
     }
     {
@@ -795,6 +796,11 @@ fn wire_main(app: Rc<std::cell::RefCell<App>>, ui: &AppWindow, child_windows: Ch
         ui.on_apply_filter(move || {
             let Some(ui) = uiw.upgrade() else { return };
             let mut a = app.borrow_mut();
+            if let Err(error) = validate_filter(&ui.get_f_id(), &ui.get_f_data()) {
+                ui.set_filter_feedback(error.into());
+                ui.set_filter_invalid(true);
+                return;
+            }
             a.filter = parse_filter(&ui.get_f_id(), &ui.get_f_name(), &ui.get_f_data());
             a.filter.dir_filter = dir_idx_to_opt(ui.get_dir_filter());
             a.last_msg_sig = u64::MAX;

@@ -1,4 +1,5 @@
 // One-window Slint page split from the original monolithic file.
+import { ProductButton } from "design-system.slint";
 import { Button, ComboBox, LineEdit, CheckBox, TabWidget, ListView, ScrollView, VerticalBox, HorizontalBox, TextEdit } from "std-widgets.slint";
 import { ByteCell, SimRow, MsgRow, SigRow, TxSigRow, TxRow, PbFileRow, TreeRow, ChanStat, IdStat, ChartSeries, DbcSignalRow, SignalPickRow, I18n, Theme, ColW, Cell, HCell, SortHeader, TBtn, Icon, RibbonBtn, RibbonGroup, RibbonTab, ConvTab, SimGlyph, ThemedWindow } from "common.slint";
 
@@ -40,7 +41,7 @@ export component ScriptRunnerWindow inherits ThemedWindow {
                 Text { text: I18n.en ? "Python interpreter (switch version here)" : "Python 解释器（在此切换版本）"; font-weight: 700; font-size: Theme.fs; color: Theme.text; }
                 HorizontalLayout { spacing: 6px;
                     LineEdit { horizontal-stretch: 1; height: Theme.ctrl-h; placeholder-text: "python.exe"; text <=> root.interp-path; }
-                    Button { text: I18n.en ? "Browse" : "浏览"; clicked => { root.browse-interp(); } }
+                    ProductButton { text: I18n.en ? "Browse" : "浏览"; clicked => { root.browse-interp(); } }
                 }
                 HorizontalLayout { spacing: 6px;
                     Rectangle {
@@ -56,7 +57,7 @@ export component ScriptRunnerWindow inherits ThemedWindow {
                             selected(v) => { root.python-selected(v); }
                         }
                     }
-                    Button { text: I18n.en ? "Detect installed" : "检测已装版本"; clicked => { root.detect-pythons(); } }
+                    ProductButton { text: I18n.en ? "Detect installed" : "检测已装版本"; clicked => { root.detect-pythons(); } }
                 }
             }
         }
@@ -67,17 +68,17 @@ export component ScriptRunnerWindow inherits ThemedWindow {
                 Text { text: I18n.en ? "Test script (.py)" : "测试脚本 (.py)"; font-weight: 700; font-size: Theme.fs; color: Theme.text; }
                 HorizontalLayout { spacing: 6px;
                     LineEdit { horizontal-stretch: 1; height: Theme.ctrl-h; placeholder-text: I18n.en ? "your_test.py" : "测试脚本路径"; text <=> root.script-path; }
-                    Button { text: I18n.en ? "Browse" : "浏览"; clicked => { root.browse-script(); } }
+                    ProductButton { text: I18n.en ? "Browse" : "浏览"; clicked => { root.browse-script(); } }
                 }
             }
         }
 
         // 运行 / 停止 + 状态
         HorizontalLayout { spacing: 8px;
-            Button { text: I18n.en ? "Run" : "运行"; enabled: !root.running; clicked => { root.run-script(); } }
-            Button { text: I18n.en ? "Run folder" : "运行套件"; enabled: !root.running; clicked => { root.run-suite(); } }
-            Button { text: I18n.en ? "Stop" : "停止"; enabled: root.running; clicked => { root.stop-run(); } }
-            Button {
+            ProductButton { text: I18n.en ? "Run" : "运行"; enabled: !root.running; clicked => { root.run-script(); } }
+            ProductButton { text: I18n.en ? "Run folder" : "运行套件"; enabled: !root.running; clicked => { root.run-suite(); } }
+            ProductButton { text: I18n.en ? "Stop" : "停止"; enabled: root.running; clicked => { root.stop-run(); } }
+            ProductButton {
                 text: root.help-open
                     ? (I18n.en ? "Back to output" : "返回输出")
                     : (I18n.en ? "User guide" : "使用说明");

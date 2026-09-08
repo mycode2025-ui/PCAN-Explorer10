@@ -1,5 +1,5 @@
 import { Button, CheckBox, ComboBox, LineEdit, ScrollView, SpinBox, TextEdit, Palette } from "std-widgets.slint";
-import { ProductDesign, ProductHeaderButton, ProductHeaderCheck, ProductI18n, ProductLanguageSwitch, ProductThemeSwitch } from "../../ui/design-system.slint";
+import { ProductDesign, ProductDensitySwitch, ProductButton, ProductHeaderButton, ProductHeaderCheck, ProductI18n, ProductLanguageSwitch, ProductThemeSwitch } from "../../ui/design-system.slint";
 
 export global I18n {
     in-out property <bool> en: ProductI18n.en;
@@ -48,7 +48,7 @@ component Card inherits Rectangle {
 
 component SectionLabel inherits Text {
     color: Theme.muted;
-    font-size: 11px;
+    font-size: ProductDesign.font-xs;
 }
 
 component CardTitle inherits Text {
@@ -71,8 +71,8 @@ component CountBadge inherits Rectangle {
         padding-left: 7px;
         padding-right: 7px;
         spacing: 4px;
-        Text { text: root.label; color: Theme.muted; font-size: 11px; vertical-alignment: center; }
-        Text { text: "" + root.value; color: root.tint; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+        Text { text: root.label; color: Theme.muted; font-size: ProductDesign.font-xs; vertical-alignment: center; }
+        Text { text: "" + root.value; color: root.tint; font-size: ProductDesign.font-xs; font-weight: 700; vertical-alignment: center; }
     }
 }
 
@@ -86,7 +86,7 @@ component NumEdit inherits LineEdit {
     callback committed();
 
     horizontal-alignment: right;
-    font-size: 12px;
+    font-size: ProductDesign.font-sm;
     text: root.allow-empty && root.value == 0 ? "" : "" + root.value;
 
     function commit() {
@@ -125,7 +125,7 @@ component QuickCommandRow inherits Rectangle {
         root.edited(en-box.checked, hex-box.checked, payload-edit.text, remark-edit.text, delay-box.value);
     }
 
-    height: 28px;
+    height: ProductDesign.row-height;
     background: transparent;
 
     Rectangle { y: parent.height - 1px; height: 1px; background: Theme.border; }
@@ -134,13 +134,13 @@ component QuickCommandRow inherits Rectangle {
         padding-left: 4px;
         padding-right: 4px;
         spacing: 5px;
-        Text { text: "" + root.idx; width: 22px; color: Theme.muted; font-size: 11px; vertical-alignment: center; horizontal-alignment: center; }
+        Text { text: "" + root.idx; width: 22px; color: Theme.muted; font-size: ProductDesign.font-xs; vertical-alignment: center; horizontal-alignment: center; }
         en-box := CheckBox { checked: root.cmd-enabled; width: 22px; toggled => { root.notify(); } }
         hex-box := CheckBox { checked: root.cmd-hex; width: 22px; toggled => { root.notify(); } }
         payload-edit := LineEdit { text: root.payload; font-family: ProductDesign.font-mono; font-size: ProductDesign.font-sm; width: 210px; edited => { root.notify(); } }
-        remark-edit := LineEdit { text: root.remark; font-size: 12px; width: 96px; edited => { root.notify(); } }
+        remark-edit := LineEdit { text: root.remark; font-size: ProductDesign.font-sm; width: 96px; edited => { root.notify(); } }
         delay-box := NumEdit { value: root.delay-ms; minimum: 0; maximum: 600000; allow-empty: true; width: 60px; committed => { root.notify(); } }
-        Button {
+        ProductButton {
             text: I18n.t("发送", "Send");
             width: 48px;
             clicked => { root.send(payload-edit.text, hex-box.checked); }
@@ -177,7 +177,7 @@ component AccentBtn inherits Rectangle {
         vertical-alignment: center;
         width: 100%;
         height: 100%;
-        font-size: 12px;
+        font-size: ProductDesign.font-sm;
     }
     ta := TouchArea {
         enabled: root.btn-enabled;
@@ -202,7 +202,7 @@ component ToolCheck inherits CheckBox {
     height: ProductDesign.toolbar-control-height;
 }
 
-component ToolButton inherits Button {
+component ToolButton inherits ProductButton {
     height: ProductDesign.toolbar-control-height;
     min-width: 72px;
 }
@@ -218,14 +218,22 @@ component ToolStrip inherits ScrollView {
 export component AppWindow inherits Window {
     title: "Serial Tool";
     icon: @image-url("../assets/app.png");
-    default-font-size: 12px;
+    default-font-size: ProductDesign.font-sm;
     default-font-family: ProductDesign.font-sans;
-    preferred-width: 940px;
-    preferred-height: 580px;
-    min-width: 920px;
-    min-height: 540px;
+    preferred-width: 1080px;
+    preferred-height: 680px;
+    min-width: 860px;
+    min-height: 580px;
     background: Theme.bg;
     always-on-top: root.topmost-enabled;
+    property <length> page-gap: 8px;
+    property <length> connection-width: 250px;
+    property <bool> connection-open: true;
+    changed width => {
+        root.page-gap = ProductDesign.page-gap(root.width);
+        root.connection-width = min(280px, max(250px, root.width * 0.26));
+        root.connection-open = root.width >= 920px;
+    }
     in-out property <bool> dark: ProductDesign.dark;
     in-out property <bool> lang-en: I18n.en;
     changed lang-en => {
@@ -409,6 +417,7 @@ export component AppWindow inherits Window {
 
                 Rectangle { horizontal-stretch: 1; }
 
+                ProductHeaderButton { text: I18n.t("连接参数", "Connection"); clicked => { root.connection-open = !root.connection-open; } }
                 Rectangle {
                     min-width: 62px; preferred-width: 62px; max-width: 62px;
                     ProductHeaderCheck { fixed-width: 62px; text: I18n.t("置顶", "Pin"); checked <=> root.topmost-enabled; }
@@ -417,6 +426,7 @@ export component AppWindow inherits Window {
                     min-width: 62px; preferred-width: 62px; max-width: 62px;
                     ProductLanguageSwitch { fixed-width: 62px; en <=> root.lang-en; changed(value) => { root.english-changed(); } }
                 }
+                ProductDensitySwitch { }
                 Rectangle {
                     min-width: 88px; preferred-width: 88px; max-width: 88px;
                     ProductThemeSwitch { fixed-width: 88px; dark <=> root.dark; }
@@ -438,15 +448,15 @@ export component AppWindow inherits Window {
 
         // ── 主体：侧边栏 + 工作区 ────────────────────────────
         HorizontalLayout {
-            padding: 8px;
-            spacing: 8px;
+            padding: root.page-gap;
+            spacing: root.page-gap;
             vertical-stretch: 1;
 
             // 侧边栏（ScrollView 比卡片宽 16px，给滚动条留位，避免裁掉右列控件）
             ScrollView {
-                width: 266px;
+                width: root.connection-open ? root.connection-width + 16px : 0px; visible: root.connection-open;
                 Card {
-                    width: 250px;
+                    width: root.connection-width;
                     VerticalLayout {
                         padding: 10px;
                         spacing: 6px;
@@ -468,7 +478,7 @@ export component AppWindow inherits Window {
                             spacing: 6px;
                             height: 30px;
                             vertical-stretch: 0;
-                            if root.transport == 0: Button { text: I18n.t("刷新", "Refresh"); clicked => { root.refresh-ports(); } }
+                            if root.transport == 0: ProductButton { text: I18n.t("刷新", "Refresh"); clicked => { root.refresh-ports(); } }
                             AccentBtn {
                                 text: connected ? I18n.t("断开", "Disconnect") : I18n.t("连接", "Connect");
                                 filled: !connected;
@@ -540,13 +550,13 @@ export component AppWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 5px;
                                 SectionLabel { text: I18n.t("远程", "Rmt"); width: 28px; vertical-alignment: center; }
-                                LineEdit { text <=> root.remote-host; width: 128px; font-size: 12px; }
+                                LineEdit { text <=> root.remote-host; width: 128px; font-size: ProductDesign.font-sm; }
                                 NumEdit { value <=> root.remote-port; minimum: 1; maximum: 65535; width: 56px; }
                             }
                             HorizontalLayout {
                                 spacing: 5px;
                                 SectionLabel { text: I18n.t("本地", "Loc"); width: 28px; vertical-alignment: center; }
-                                LineEdit { text <=> root.local-host; width: 128px; font-size: 12px; }
+                                LineEdit { text <=> root.local-host; width: 128px; font-size: ProductDesign.font-sm; }
                                 NumEdit { value <=> root.local-port; minimum: 1; maximum: 65535; width: 56px; }
                             }
                         }
@@ -557,15 +567,15 @@ export component AppWindow inherits Window {
                             Rectangle { height: 1px; background: Theme.border; }
                             CardTitle { text: I18n.t("SSH 串口", "SSH Serial"); }
                             SectionLabel { text: I18n.t("远端需装 socat", "remote needs socat"); }
-                            HorizontalLayout { spacing: 5px; SectionLabel { text: I18n.t("主机", "Host"); width: 28px; vertical-alignment: center; } LineEdit { text <=> root.ssh-host; width: 110px; font-size: 12px; } NumEdit { value <=> root.ssh-port; minimum: 1; maximum: 65535; width: 50px; } }
-                            HorizontalLayout { spacing: 5px; SectionLabel { text: I18n.t("用户", "User"); width: 28px; vertical-alignment: center; } LineEdit { text <=> root.ssh-user; width: 84px; font-size: 12px; } SectionLabel { text: I18n.t("波特", "Baud"); width: 28px; vertical-alignment: center; } NumEdit { value <=> root.ssh-baud; minimum: 50; maximum: 4000000; width: 84px; } }
-                            HorizontalLayout { spacing: 5px; SectionLabel { text: I18n.t("设备", "Dev"); width: 28px; vertical-alignment: center; } LineEdit { text <=> root.ssh-device; placeholder-text: "/dev/ttyUSB0"; width: 168px; font-size: 12px; } }
+                            HorizontalLayout { spacing: 5px; SectionLabel { text: I18n.t("主机", "Host"); width: 28px; vertical-alignment: center; } LineEdit { text <=> root.ssh-host; width: 110px; font-size: ProductDesign.font-sm; } NumEdit { value <=> root.ssh-port; minimum: 1; maximum: 65535; width: 50px; } }
+                            HorizontalLayout { spacing: 5px; SectionLabel { text: I18n.t("用户", "User"); width: 28px; vertical-alignment: center; } LineEdit { text <=> root.ssh-user; width: 84px; font-size: ProductDesign.font-sm; } SectionLabel { text: I18n.t("波特", "Baud"); width: 28px; vertical-alignment: center; } NumEdit { value <=> root.ssh-baud; minimum: 50; maximum: 4000000; width: 84px; } }
+                            HorizontalLayout { spacing: 5px; SectionLabel { text: I18n.t("设备", "Dev"); width: 28px; vertical-alignment: center; } LineEdit { text <=> root.ssh-device; placeholder-text: "/dev/ttyUSB0"; width: 168px; font-size: ProductDesign.font-sm; } }
                             SectionLabel { text: I18n.t("认证方式", "Auth"); }
                             ComboBox { model: [I18n.t("私钥", "Private Key"), I18n.t("密码", "Password")]; current-index <=> root.ssh-auth; }
-                            if root.ssh-auth == 0: HorizontalLayout { spacing: 5px; SectionLabel { text: I18n.t("私钥", "Key"); width: 28px; vertical-alignment: center; } LineEdit { text <=> root.ssh-key; placeholder-text: I18n.t("可空=默认/agent", "blank=default/agent"); width: 168px; font-size: 12px; } }
-                            if root.ssh-auth == 1: HorizontalLayout { spacing: 5px; SectionLabel { text: I18n.t("密码", "Pwd"); width: 28px; vertical-alignment: center; } LineEdit { text <=> root.ssh-password; input-type: InputType.password; width: 168px; font-size: 12px; } }
+                            if root.ssh-auth == 0: HorizontalLayout { spacing: 5px; SectionLabel { text: I18n.t("私钥", "Key"); width: 28px; vertical-alignment: center; } LineEdit { text <=> root.ssh-key; placeholder-text: I18n.t("可空=默认/agent", "blank=default/agent"); width: 168px; font-size: ProductDesign.font-sm; } }
+                            if root.ssh-auth == 1: HorizontalLayout { spacing: 5px; SectionLabel { text: I18n.t("密码", "Pwd"); width: 28px; vertical-alignment: center; } LineEdit { text <=> root.ssh-password; input-type: InputType.password; width: 168px; font-size: ProductDesign.font-sm; } }
                             SectionLabel { text: I18n.t("远端命令模板", "Remote cmd"); }
-                            LineEdit { text <=> root.ssh-cmd-template; font-size: 11px; }
+                            LineEdit { text <=> root.ssh-cmd-template; font-size: ProductDesign.font-xs; }
                         }
 
                         Rectangle { vertical-stretch: 1; }
@@ -622,7 +632,7 @@ export component AppWindow inherits Window {
                             private property <int> scroll-request: root.rx-scroll-request;
                             text <=> root.receive-text;
                             font-family: ProductDesign.font-mono;
-                            font-size: 12px;
+                            font-size: ProductDesign.font-sm;
                             wrap: word-wrap;
                             vertical-stretch: 1;
                             changed scroll-request => {
@@ -659,18 +669,18 @@ export component AppWindow inherits Window {
                         TextEdit {
                             text <=> root.send-text;
                             font-family: ProductDesign.font-mono;
-                            font-size: 12px;
+                            font-size: ProductDesign.font-sm;
                             vertical-stretch: 1;
                         }
 
                         HorizontalLayout {
                             spacing: 5px;
-                            Button { text: I18n.t("打开文件", "Open File"); clicked => { root.open-file(); } }
-                            Button { text: I18n.t("发送文件", "Send File"); clicked => { root.send-file(); } }
+                            ProductButton { text: I18n.t("打开文件", "Open File"); clicked => { root.open-file(); } }
+                            ProductButton { text: I18n.t("发送文件", "Send File"); clicked => { root.send-file(); } }
                             Text {
                                 text: selected-file == "" ? I18n.t("未选择文件", "No file") : selected-file;
                                 color: Theme.muted;
-                                font-size: 11px;
+                                font-size: ProductDesign.font-xs;
                                 vertical-alignment: center;
                                 overflow: elide;
                                 horizontal-stretch: 1;
@@ -678,12 +688,12 @@ export component AppWindow inherits Window {
                             SectionLabel { text: I18n.t("定时", "Every"); vertical-alignment: center; }
                             NumEdit { value <=> root.auto-interval-ms; minimum: 1; maximum: 600000; width: 64px; }
                             SectionLabel { text: "ms"; vertical-alignment: center; }
-                            Button {
+                            ProductButton {
                                 text: auto-sending ? I18n.t("停止定时", "Stop Timer") : I18n.t("定时发送", "Auto Send");
                                 clicked => { root.toggle-auto-send(); }
                             }
-                            Button { text: I18n.t("停止", "Stop"); clicked => { root.stop-sending(); } }
-                            Button { text: I18n.t("清空", "Clear"); clicked => { root.clear-send(); } }
+                            ProductButton { text: I18n.t("停止", "Stop"); clicked => { root.stop-sending(); } }
+                            ProductButton { text: I18n.t("清空", "Clear"); clicked => { root.clear-send(); } }
                             AccentBtn {
                                 text: I18n.t("发 送", "Send");
                                 min-width: 84px;
@@ -766,9 +776,9 @@ export component AppWindow inherits Window {
                                         toggled => { root.toggle-receive-file(); }
                                     }
                                     SectionLabel { text: I18n.t("字号", "Font"); vertical-alignment: center; height: 30px; }
-                                    Button { text: "-"; width: 32px; height: 30px; clicked => { root.terminal-font-size = max(10, root.terminal-font-size - 1); } }
+                                    ProductButton { text: "-"; width: 32px; height: 30px; clicked => { root.terminal-font-size = max(10, root.terminal-font-size - 1); } }
                                     Text { text: "" + root.terminal-font-size; width: 24px; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
-                                    Button { text: "+"; width: 32px; height: 30px; clicked => { root.terminal-font-size = min(28, root.terminal-font-size + 1); } }
+                                    ProductButton { text: "+"; width: 32px; height: 30px; clicked => { root.terminal-font-size = min(28, root.terminal-font-size + 1); } }
                                     SectionLabel { text: I18n.t("缓存", "Buffer"); vertical-alignment: center; height: 30px; }
                                     ComboBox {
                                         model: ["10,000", "50,000", "100,000", "500,000", I18n.t("不限制", "Unlimited")];
@@ -939,22 +949,22 @@ export component AppWindow inherits Window {
                 padding-left: 10px;
                 padding-right: 10px;
                 spacing: 10px;
-                Text { text: status-message; color: Theme.muted; font-size: 11px; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
-                Text { text: root.io-health; color: root.io-loss ? Theme.danger : Theme.muted; font-size: 11px; font-family: ProductDesign.font-mono; vertical-alignment: center; }
-                Text { text: "TX " + tx-count; color: Theme.success; font-size: 11px; vertical-alignment: center; }
-                Text { text: "RX " + rx-count; color: Theme.accent; font-size: 11px; vertical-alignment: center; }
+                Text { text: status-message; color: Theme.muted; font-size: ProductDesign.font-xs; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                Text { text: root.io-health; color: root.io-loss ? Theme.danger : Theme.muted; font-size: ProductDesign.font-xs; font-family: ProductDesign.font-mono; vertical-alignment: center; }
+                Text { text: "TX " + tx-count; color: Theme.success; font-size: ProductDesign.font-xs; vertical-alignment: center; }
+                Text { text: "RX " + rx-count; color: Theme.accent; font-size: ProductDesign.font-xs; vertical-alignment: center; }
                 if root.work-mode == 1: Text {
                     text: (root.terminal-encoding == 0 ? "UTF-8" : root.terminal-encoding == 1 ? "GBK" : root.terminal-encoding == 2 ? "GB18030" : root.terminal-encoding == 3 ? "Latin-1" : "ASCII")
                         + " · "
                         + (root.terminal-line-ending == 0 ? "None" : root.terminal-line-ending == 1 ? "CR" : root.terminal-line-ending == 2 ? "LF" : "CRLF");
                     color: Theme.muted;
-                    font-size: 11px;
+                    font-size: ProductDesign.font-xs;
                     vertical-alignment: center;
                 }
                 Text {
                     text: selected-baud + " · " + selected-data-bits + "-" + selected-parity + "-" + selected-stop-bits;
                     color: Theme.muted;
-                    font-size: 11px;
+                    font-size: ProductDesign.font-xs;
                     vertical-alignment: center;
                 }
             }
@@ -967,7 +977,7 @@ export component AppWindow inherits Window {
 export component QuickWindow inherits Window {
     title: I18n.t("多条字符串发送", "Multi-String Send");
     icon: @image-url("../assets/app.png");
-    default-font-size: 12px;
+    default-font-size: ProductDesign.font-sm;
     preferred-width: 584px;
     preferred-height: 520px;
     min-width: 560px;
@@ -993,12 +1003,12 @@ export component QuickWindow inherits Window {
             spacing: 5px;
             CheckBox { text: I18n.t("循环发送", "Loop"); checked <=> root.quick-loop-enabled; }
             AccentBtn { text: I18n.t("顺序发送", "Run Sequence"); clicked => { root.run-quick-sequence(); } }
-            Button { text: I18n.t("停止", "Stop"); clicked => { root.stop-sending(); } }
+            ProductButton { text: I18n.t("停止", "Stop"); clicked => { root.stop-sending(); } }
             Rectangle { horizontal-stretch: 1; }
-            Button { text: I18n.t("导入ini", "Import"); clicked => { root.import-quick-ini(); } }
-            Button { text: I18n.t("导出ini", "Export"); clicked => { root.export-quick-ini(); } }
-            Button { text: "+"; width: 30px; clicked => { root.add-quick-row(); } }
-            Button { text: "-"; width: 30px; clicked => { root.remove-quick-row(); } }
+            ProductButton { text: I18n.t("导入ini", "Import"); clicked => { root.import-quick-ini(); } }
+            ProductButton { text: I18n.t("导出ini", "Export"); clicked => { root.export-quick-ini(); } }
+            ProductButton { text: "+"; width: 30px; clicked => { root.add-quick-row(); } }
+            ProductButton { text: "-"; width: 30px; clicked => { root.remove-quick-row(); } }
         }
 
         Rectangle {
@@ -1008,12 +1018,12 @@ export component QuickWindow inherits Window {
             HorizontalLayout {
                 padding-left: 4px;
                 spacing: 5px;
-                Text { text: "#"; width: 22px; color: Theme.muted; font-size: 11px; vertical-alignment: center; horizontal-alignment: center; }
-                Text { text: I18n.t("启用", "On"); width: 22px; color: Theme.muted; font-size: 11px; vertical-alignment: center; }
-                Text { text: "HEX"; width: 22px; color: Theme.muted; font-size: 11px; vertical-alignment: center; }
-                Text { text: I18n.t("内容", "Payload"); width: 210px; color: Theme.muted; font-size: 11px; vertical-alignment: center; }
-                Text { text: I18n.t("注释", "Remark"); width: 96px; color: Theme.muted; font-size: 11px; vertical-alignment: center; }
-                Text { text: I18n.t("延时ms", "Delay"); width: 60px; color: Theme.muted; font-size: 11px; vertical-alignment: center; }
+                Text { text: "#"; width: 22px; color: Theme.muted; font-size: ProductDesign.font-xs; vertical-alignment: center; horizontal-alignment: center; }
+                Text { text: I18n.t("启用", "On"); width: 22px; color: Theme.muted; font-size: ProductDesign.font-xs; vertical-alignment: center; }
+                Text { text: "HEX"; width: 22px; color: Theme.muted; font-size: ProductDesign.font-xs; vertical-alignment: center; }
+                Text { text: I18n.t("内容", "Payload"); width: 210px; color: Theme.muted; font-size: ProductDesign.font-xs; vertical-alignment: center; }
+                Text { text: I18n.t("注释", "Remark"); width: 96px; color: Theme.muted; font-size: ProductDesign.font-xs; vertical-alignment: center; }
+                Text { text: I18n.t("延时ms", "Delay"); width: 60px; color: Theme.muted; font-size: ProductDesign.font-xs; vertical-alignment: center; }
                 Rectangle { horizontal-stretch: 1; }
             }
         }

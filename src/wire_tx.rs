@@ -780,7 +780,11 @@ fn wire_tx(
             match tx_task_from_form(
                 &mut a, &ch, &id, &kind, &fd, &brs, &dlc, &data, &period, &name, remote,
             ) {
-                Ok(t) => {
+                Ok(mut t) => {
+                    t.repeat = txw
+                        .upgrade()
+                        .map(|w| parse_tx_repeat(&w.get_tx_form_repeat()))
+                        .unwrap_or(1);
                     a.log(format!("添加发送报文: {} {}", t.name, id_str(t.id, t.ext)));
                     a.txs.push(t);
                 }

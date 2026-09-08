@@ -1,6 +1,6 @@
 // Common types, globals and reusable widgets split from the original monolithic file.
 import { Button, ComboBox, LineEdit, CheckBox, TabWidget, ListView, ScrollView, VerticalBox, HorizontalBox, TextEdit, Palette } from "std-widgets.slint";
-import { ProductDesign, ProductI18n } from "design-system.slint";
+import { ProductDesign, ProductButton, ProductI18n } from "design-system.slint";
 
 
 export struct ByteCell {
@@ -184,6 +184,7 @@ export struct IdStat {
 export struct ChartSeries {
     name: string,
     commands: string,
+    marker-commands: string,
     clr: color,
     cur: string,
     unit: string,
@@ -293,6 +294,8 @@ export global Theme {
 // Windows can be created lazily, after the OS color scheme or saved product theme
 // has changed; relying only on the main window leaves controls white-on-white.
 export component ThemedWindow inherits Window {
+    default-font-family: ProductDesign.font-sans;
+    default-font-size: ProductDesign.body-font-size;
     in-out property <bool> dark: Theme.dark;
     changed dark => {
         Theme.dark = root.dark;
@@ -420,9 +423,10 @@ export component SortHeader inherits Rectangle {
             text: text; color: Theme.text; font-weight: 700; font-size: Theme.fs;
             vertical-alignment: center; horizontal-stretch: 1; overflow: elide;
         }
-        Text {
-            text: root.sort-col == cidx ? (sort-desc ? "v" : "^") : "";
-            color: Theme.accent; font-size: Theme.fs-sm; vertical-alignment: center;
+        Image {
+            visible: root.sort-col == cidx;
+            source: root.sort-desc ? @image-url("icons/chevron-down.svg") : @image-url("icons/chevron-up.svg");
+            width: 14px; height: 14px; colorize: Theme.accent;
         }
     }
     key-focus := FocusScope {
@@ -460,61 +464,14 @@ export component SortHeader inherits Rectangle {
     }
 }
 
-export component TBtn inherits Rectangle {
-    in property <string> text;
-    in property <bool> active: false;
-    in property <bool> boxed: false;   // always render a button box (border + surface), even when idle
-    in property <bool> primary: false; // filled accent (primary action button)
+export component TBtn inherits ProductButton {
     in property <bool> btn-enabled: true;
-    in property <length> h: Theme.ctrl-h;
-    in property <length> fs: Theme.fs;
-    callback clicked;
-    width: txt.preferred-width + 22px;
-    height: h;
-    border-radius: Theme.radius;
-    accessible-role: AccessibleRole.button;
-    accessible-label: root.text;
-    accessible-enabled: root.btn-enabled;
-    forward-focus: key-focus;
-    accessible-action-default => { root.clicked(); }
-    background: !root.btn-enabled ? Theme.panel2
-        : ta.pressed ? ((root.primary || root.active) ? Theme.accent.darker(0.22) : Theme.panel2.darker(0.10))
-        : (root.primary || root.active) ? Theme.accent
-        : ta.has-hover ? Theme.panel2
-        : root.boxed ? Theme.panel
-        : transparent;
-    animate background { duration: 90ms; }
-    border-width: key-focus.has-focus ? ProductDesign.focus-width : 1px;
-    border-color: key-focus.has-focus ? Theme.warn
-        : (root.primary || root.active) ? Theme.accent
-        : (root.boxed || ta.has-hover) ? Theme.border
-        : transparent;
-    txt := Text {
-        text: text;
-        width: 100%;
-        color: !root.btn-enabled ? Theme.text-dim : ((root.primary || root.active) ? Theme.on-accent : Theme.text);
-        vertical-alignment: center;
-        horizontal-alignment: center;
-        font-size: root.fs;
-    }
-    ta := TouchArea {
-        enabled: root.btn-enabled;
-        clicked => { root.clicked(); }
-    }
-    key-focus := FocusScope {
-        x: 0px;
-        width: 0px;
-        enabled: root.btn-enabled;
-        key-pressed(event) => {
-            if event.text == Key.Return || event.text == " " {
-                root.clicked();
-                return accept;
-            }
-            return reject;
-        }
-    }
+    enabled: root.btn-enabled;
+    boxed: false;
+    h: Theme.ctrl-h;
+    fs: Theme.fs;
+    width: root.natural-width;
 }
-
 
 // ======================= 矢量图标 =======================
 
@@ -545,7 +502,18 @@ export component Icon inherits Rectangle {
         name == "save" ? "M4 4 H16 L20 8 V20 H4 Z M8 4 V9 H15 M8 20 V14 H16 V20" :
         name == "info" ? "M12 3 A9 9 0 0 0 12 21 A9 9 0 0 0 12 3 Z M12 10 V17 M12 7 V7.2" :
         name == "filter" ? "M4 5 H20 L14 12 V19 L10 17 V12 Z" :
-        name == "window" ? "M4 5 H20 V19 H4 Z M4 9 H20" : "";
+        name == "window" ? "M4 5 H20 V19 H4 Z M4 9 H20" :
+        name == "cursor" ? "M12 3 V21 M3 12 H21 M12 8 A4 4 0 0 0 12 16 A4 4 0 0 0 12 8 Z" :
+        name == "dual-cursor" ? "M8 4 V20 M16 4 V20 M5 8 H11 M13 16 H19" :
+        name == "zoom-in" ? "M4 11 A7 7 0 0 0 18 11 A7 7 0 0 0 4 11 Z M16 16 L21 21 M8 11 H14 M11 8 V14" :
+        name == "zoom-out" ? "M4 11 A7 7 0 0 0 18 11 A7 7 0 0 0 4 11 Z M16 16 L21 21 M8 11 H14" :
+        name == "fit" ? "M4 9 V4 H9 M15 4 H20 V9 M20 15 V20 H15 M9 20 H4 V15" :
+        name == "export" ? "M12 3 V15 M8 11 L12 15 L16 11 M5 18 V21 H19 V18" :
+        name == "table" ? "M4 5 H20 V19 H4 Z M4 10 H20 M4 15 H20 M10 5 V19 M16 5 V19" :
+        name == "grid" ? "M4 4 H20 V20 H4 Z M4 9 H20 M4 15 H20 M9 4 V20 M15 4 V20" :
+        name == "time-actual" ? "M12 3 A9 9 0 0 0 12 21 A9 9 0 0 0 12 3 Z M12 7 V12 L16 15" :
+        name == "y-shared" ? "M4 19 V5 M4 19 H20 M7 15 L11 9 L15 13 L20 7 M7 5 H20" :
+        name == "y-normalized" ? "M4 19 V5 M4 19 H20 M7 15 L11 10 L15 13 L20 7 M7 5 H20 M18 3 L20 5 L18 7" : "";
     property <string> treecmd:
         name == "expand" ? "M9 6 L15 12 L9 18" :
         name == "collapse" ? "M6 9 L12 15 L18 9" : "";
@@ -567,6 +535,41 @@ export component Icon inherits Rectangle {
     Image {
         visible: name == "convert";
         source: @image-url("icons/convert.svg");
+        colorize: clr;
+        width: 100%; height: 100%;
+        image-fit: contain;
+    }
+    Image {
+        visible: name == "pin";
+        source: @image-url("icons/pin.svg");
+        colorize: clr;
+        width: 100%; height: 100%;
+        image-fit: contain;
+    }
+    Image {
+        visible: name == "time-relative";
+        source: @image-url("icons/time-relative.svg");
+        colorize: clr;
+        width: 100%; height: 100%;
+        image-fit: contain;
+    }
+    Image {
+        visible: name == "y-independent";
+        source: @image-url("icons/y-independent.svg");
+        colorize: clr;
+        width: 100%; height: 100%;
+        image-fit: contain;
+    }
+    Image {
+        visible: name == "pan";
+        source: @image-url("icons/pan.svg");
+        colorize: clr;
+        width: 100%; height: 100%;
+        image-fit: contain;
+    }
+    Image {
+        visible: name == "zoom-box";
+        source: @image-url("icons/zoom-box.svg");
         colorize: clr;
         width: 100%; height: 100%;
         image-fit: contain;
@@ -678,7 +681,7 @@ export component HexByteEditorOverlay inherits Rectangle {
     callback apply-requested() -> bool;
 
     visible: root.open;
-    background: #00000070;
+    background: ProductDesign.scrim;
     TouchArea { clicked => { root.close-requested(); } }
     Rectangle {
         width: 620px; height: Math.min(620px, parent.height - 16px);
@@ -1012,7 +1015,7 @@ export component SimGlyph inherits Rectangle {
             Rectangle {
                 x: parent.width - 22px; y: 1px; width: 20px; height: 20px; border-radius: 4px;
                 background: clear-area.has-hover ? Theme.accent-soft : transparent;
-                Text { text: "×"; color: Theme.text-dim; font-size: Theme.fs; horizontal-alignment: center; vertical-alignment: center; }
+                Image { source: @image-url("icons/close.svg"); width: 16px; height: 16px; x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; colorize: Theme.text-dim; }
                 clear-area := TouchArea { mouse-cursor: pointer; clicked => { root.trend-action(1); } }
             }
         }

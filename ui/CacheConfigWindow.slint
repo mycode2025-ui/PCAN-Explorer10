@@ -1,4 +1,5 @@
 // One-window Slint page split from the original monolithic file.
+import { ProductButton } from "design-system.slint";
 import { Button, ComboBox, LineEdit, CheckBox, TabWidget, ListView, ScrollView, VerticalBox, HorizontalBox, TextEdit } from "std-widgets.slint";
 import { ByteCell, SimRow, MsgRow, SigRow, TxSigRow, TxRow, PbFileRow, TreeRow, ChanStat, IdStat, ChartSeries, DbcSignalRow, SignalPickRow, I18n, Theme, ColW, Cell, HCell, SortHeader, TBtn, Icon, RibbonBtn, RibbonGroup, RibbonTab, ConvTab, SimGlyph, ThemedWindow } from "common.slint";
 
@@ -7,10 +8,12 @@ export component CacheConfigWindow inherits ThemedWindow {
     icon: @image-url("logo.svg");
     preferred-width: 480px;
     preferred-height: 280px;
+    min-width: 440px;
+    min-height: 260px;
     background: Theme.bg;
 
     in-out property <string> trace-cap: "100000";
-    in-out property <string> chart-cap: "10000";
+    in-out property <string> chart-cap: "100000";
     callback apply-cache(string, string);
     callback cancel();
 
@@ -30,7 +33,7 @@ export component CacheConfigWindow inherits ThemedWindow {
         }
         Rectangle { vertical-stretch: 1;
             Text {
-                text: I18n.en ? "100k frames ≈ 15–25MB RAM. Smaller = less memory & smoother; larger = longer history. Chart keeps 10k points per signal by default." : "10 万帧约占 15–25MB 内存。调小更省内存、更流畅；调大可保留更长历史。曲线每信号默认 1 万点。";
+                text: I18n.en ? "100k raw frames ≈ 15–25MB RAM. Charts retain 100k points per signal by default; playback keeps the complete loaded history. Rendering is optimized to the plot width while preserving peaks." : "10 万帧原始缓存约占 15–25MB。曲线每个信号默认保留 10 万点；文件回放会完整保留已载入历史。绘图按窗口宽度优化，并保留峰值/谷值。";
                 x: 2px; y: 4px; width: parent.width - 4px; color: Theme.text-dim; font-size: 12px; wrap: word-wrap;
             }
         }
@@ -39,8 +42,8 @@ export component CacheConfigWindow inherits ThemedWindow {
             HorizontalLayout {
                 spacing: 8px;
                 Rectangle { horizontal-stretch: 1; }
-                Button { text: I18n.en ? "Apply" : "应用"; clicked => { root.apply-cache(root.trace-cap, root.chart-cap); } }
-                Button { text: I18n.en ? "Cancel" : "取消"; clicked => { root.cancel(); } }
+                ProductButton { text: I18n.en ? "Apply" : "应用"; clicked => { root.apply-cache(root.trace-cap, root.chart-cap); } }
+                ProductButton { text: I18n.en ? "Cancel" : "取消"; clicked => { root.cancel(); } }
             }
         }
     }

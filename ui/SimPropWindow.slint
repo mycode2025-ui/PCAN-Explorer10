@@ -1,4 +1,5 @@
 import { Button, CheckBox, ComboBox, LineEdit, ListView, ScrollView } from "std-widgets.slint";
+import { ProductButton } from "design-system.slint";
 import { I18n, Theme, Icon, TBtn, SignalPickRow, ThemedWindow } from "common.slint";
 import { ProductDesign } from "design-system.slint";
 
@@ -511,7 +512,7 @@ export component SimPropWindow inherits ThemedWindow {
                         VerticalLayout { padding: 10px; spacing: 7px;
                             HorizontalLayout { spacing: 8px;
                                 FieldLabel { label: I18n.en ? "Image" : "图片文件"; }
-                                Button { width: 96px; horizontal-stretch: 0; text: I18n.en ? "Browse…" : "浏览…"; clicked => { root.prop-image(); } }
+                                ProductButton { width: 96px; horizontal-stretch: 0; text: I18n.en ? "Browse…" : "浏览…"; clicked => { root.prop-image(); } }
                                 Rectangle { horizontal-stretch: 1; }
                             }
                             Text { text: root.p-image-path == "" ? (I18n.en ? "No image selected" : "尚未选择图片") : root.p-image-path; color: Theme.text-dim; font-size: ProductDesign.font-xs; overflow: elide; }
@@ -563,7 +564,7 @@ export component SimPropWindow inherits ThemedWindow {
                 padding-top: 10px;
                 padding-bottom: 10px;
                 spacing: 8px;
-                Button { text: I18n.en ? "Delete control" : "删除控件"; clicked => { root.prop-remove(); } }
+                ProductButton { text: I18n.en ? "Delete control" : "删除控件"; clicked => { root.prop-remove(); } }
                 Rectangle { horizontal-stretch: 1; }
                 TBtn { primary: true; text: I18n.en ? "Apply changes" : "应用修改"; clicked => { root.prop-apply(); } }
             }

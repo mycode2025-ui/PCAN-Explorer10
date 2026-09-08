@@ -45,21 +45,127 @@ enum Source {
 }
 
 pub(crate) fn check(current: &str) -> Result<CheckResult, String> {
-    match check_source(current, GITEE_LATEST_API, Source::Gitee) {
-        Ok(CheckResult::Available(mut info)) => {
-            // Gitee 决定最新版本；随后读取 GitHub 同版本 asset，确保两个按钮都优先使用 API 返回地址。
-            if let Ok(release) = fetch_release(GITHUB_LATEST_API)
-                && parse_version(&release.tag_name).ok().as_ref()
-                    == parse_version(&info.version).ok().as_ref()
-                && let Some(asset) = select_installer(&release.assets)
-            {
-                info.github_download = asset.browser_download_url.clone();
+    // Query both mirrors independently. A healthy but stale Gitee response must
+    // never hide a newer GitHub release (and vice versa).
+    let (gitee, github) = std::thread::scope(|scope| {
+        let gitee = scope.spawn(|| check_source(current, GITEE_LATEST_API, Source::Gitee));
+        let github = scope.spawn(|| check_source(current, GITHUB_LATEST_API, Source::Github));
+        (
+            gitee
+                .join()
+                .unwrap_or_else(|_| Err("Gitee 检查线程异常".into())),
+            github
+                .join()
+                .unwrap_or_else(|_| Err("GitHub 检查线程异常".into())),
+        )
+    });
+    let mut result = merge_results(gitee, github)?;
+    if let CheckResult::Available(info) = &mut result {
+        populate_reachable_mirrors(info);
+    }
+    Ok(result)
+}
+
+fn populate_reachable_mirrors(info: &mut UpdateInfo) {
+    if info.gitee_download.is_empty() {
+        let candidate = expected_download(Source::Gitee, &info.version);
+        if download_exists(&candidate) {
+            info.gitee_download = candidate;
+        }
+    }
+    if info.github_download.is_empty() {
+        let candidate = expected_download(Source::Github, &info.version);
+        if download_exists(&candidate) {
+            info.github_download = candidate;
+        }
+    }
+}
+
+fn expected_download(source: Source, version: &str) -> String {
+    let tag = format!("v{version}");
+    let installer = format!("PcanWork-Setup-{version}.exe");
+    match source {
+        Source::Gitee => {
+            format!("https://gitee.com/{OWNER}/{REPOSITORY}/releases/download/{tag}/{installer}")
+        }
+        Source::Github => {
+            format!("https://github.com/{OWNER}/{REPOSITORY}/releases/download/{tag}/{installer}")
+        }
+    }
+}
+
+fn download_exists(url: &str) -> bool {
+    let config = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(7)))
+        .https_only(true)
+        .tls_config(
+            ureq::tls::TlsConfig::builder()
+                .provider(ureq::tls::TlsProvider::NativeTls)
+                .build(),
+        )
+        .build();
+    ureq::Agent::new_with_config(config)
+        .get(url)
+        .header("Range", "bytes=0-0")
+        .header(
+            "User-Agent",
+            format!("PcanWork/{}", crate::product_version::current()),
+        )
+        .call()
+        .is_ok()
+}
+
+fn merge_results(
+    gitee: Result<CheckResult, String>,
+    github: Result<CheckResult, String>,
+) -> Result<CheckResult, String> {
+    match (gitee, github) {
+        (Ok(gitee), Ok(github)) => merge_successful_results(gitee, github),
+        (Ok(result), Err(_)) | (Err(_), Ok(result)) => Ok(result),
+        (Err(gitee_error), Err(github_error)) => {
+            Err(format!("Gitee: {gitee_error}; GitHub: {github_error}"))
+        }
+    }
+}
+
+fn merge_successful_results(
+    gitee: CheckResult,
+    github: CheckResult,
+) -> Result<CheckResult, String> {
+    match (gitee, github) {
+        (CheckResult::Available(mut gitee), CheckResult::Available(github)) => {
+            let gitee_version = parse_version(&gitee.version)?;
+            let github_version = parse_version(&github.version)?;
+            if github_version > gitee_version {
+                return Ok(CheckResult::Available(github));
             }
+            if github_version == gitee_version {
+                gitee.github_download = github.github_download;
+                if gitee.notes.is_empty() {
+                    gitee.notes = github.notes;
+                }
+            }
+            Ok(CheckResult::Available(gitee))
+        }
+        (CheckResult::Available(info), CheckResult::Current { .. })
+        | (CheckResult::Current { .. }, CheckResult::Available(info)) => {
             Ok(CheckResult::Available(info))
         }
-        Ok(result) => Ok(result),
-        Err(gitee_error) => check_source(current, GITHUB_LATEST_API, Source::Github)
-            .map_err(|github_error| format!("Gitee: {gitee_error}; GitHub: {github_error}")),
+        (
+            CheckResult::Current {
+                latest: gitee_latest,
+            },
+            CheckResult::Current {
+                latest: github_latest,
+            },
+        ) => {
+            let latest = if parse_version(&github_latest)? > parse_version(&gitee_latest)? {
+                github_latest
+            } else {
+                gitee_latest
+            };
+            Ok(CheckResult::Current { latest })
+        }
     }
 }
 
@@ -109,15 +215,9 @@ fn evaluate_release(
 
     let asset = select_installer(&release.assets)
         .ok_or_else(|| format!("{} 未包含 Windows 安装包", release.tag_name))?;
-    let tag = &release.tag_name;
-    let encoded_name = asset.name.replace(' ', "%20");
-    let github_mirror =
-        format!("https://github.com/{OWNER}/{REPOSITORY}/releases/download/{tag}/{encoded_name}");
-    let gitee_mirror =
-        format!("https://gitee.com/{OWNER}/{REPOSITORY}/releases/download/{tag}/{encoded_name}");
     let (gitee_download, github_download) = match source {
-        Source::Gitee => (asset.browser_download_url.clone(), github_mirror),
-        Source::Github => (gitee_mirror, asset.browser_download_url.clone()),
+        Source::Gitee => (asset.browser_download_url.clone(), String::new()),
+        Source::Github => (String::new(), asset.browser_download_url.clone()),
     };
 
     Ok(CheckResult::Available(UpdateInfo {
@@ -193,7 +293,7 @@ mod tests {
     }
 
     #[test]
-    fn newer_version_uses_asset_and_builds_second_mirror() {
+    fn newer_version_uses_only_the_confirmed_source_asset() {
         let result = evaluate_release(
             "0.1.24",
             release(
@@ -208,9 +308,62 @@ mod tests {
         };
         assert_eq!(info.version, "0.1.25");
         assert_eq!(info.gitee_download, "https://gitee.test/setup.exe");
+        assert!(info.github_download.is_empty());
+    }
+
+    #[test]
+    fn github_newer_release_is_not_hidden_by_current_gitee_release() {
+        let gitee = evaluate_release("0.4.7", release("v0.4.7", &[]), Source::Gitee);
+        let github = evaluate_release(
+            "0.4.7",
+            release(
+                "v0.4.8",
+                &[("PcanWork-Setup-0.4.8.exe", "https://github.test/setup.exe")],
+            ),
+            Source::Github,
+        );
+        let CheckResult::Available(info) = merge_results(gitee, github).unwrap() else {
+            panic!("expected GitHub update");
+        };
+        assert_eq!(info.version, "0.4.8");
+        assert!(info.gitee_download.is_empty());
+        assert_eq!(info.github_download, "https://github.test/setup.exe");
+    }
+
+    #[test]
+    fn equal_release_versions_combine_both_confirmed_downloads() {
+        let gitee = evaluate_release(
+            "0.4.7",
+            release(
+                "v0.4.8",
+                &[("PcanWork-Setup-0.4.8.exe", "https://gitee.test/setup.exe")],
+            ),
+            Source::Gitee,
+        );
+        let github = evaluate_release(
+            "0.4.7",
+            release(
+                "v0.4.8",
+                &[("PcanWork-Setup-0.4.8.exe", "https://github.test/setup.exe")],
+            ),
+            Source::Github,
+        );
+        let CheckResult::Available(info) = merge_results(gitee, github).unwrap() else {
+            panic!("expected combined update");
+        };
+        assert_eq!(info.gitee_download, "https://gitee.test/setup.exe");
+        assert_eq!(info.github_download, "https://github.test/setup.exe");
+    }
+
+    #[test]
+    fn expected_download_urls_use_the_product_release_convention() {
         assert_eq!(
-            info.github_download,
-            "https://github.com/mycode2025-ui/pcanwork/releases/download/v0.1.25/PcanWork-Setup-0.1.25.exe"
+            expected_download(Source::Github, "0.4.9"),
+            "https://github.com/mycode2025-ui/pcanwork/releases/download/v0.4.9/PcanWork-Setup-0.4.9.exe"
+        );
+        assert_eq!(
+            expected_download(Source::Gitee, "0.4.9"),
+            "https://gitee.com/mycode2025-ui/pcanwork/releases/download/v0.4.9/PcanWork-Setup-0.4.9.exe"
         );
     }
 

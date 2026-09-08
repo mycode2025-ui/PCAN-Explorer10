@@ -1,4 +1,5 @@
 ﻿// One-window Slint page split from the original monolithic file.
+import { ProductDesign, ProductModal } from "design-system.slint";
 import { Button, ComboBox, LineEdit, CheckBox, TabWidget, ListView, ScrollView, VerticalBox, HorizontalBox, TextEdit } from "std-widgets.slint";
 import { ByteCell, TxByteRow, HexDataField, HexByteEditorOverlay, SimRow, MsgRow, SigRow, TxSigRow, TxRow, PbFileRow, TreeRow, ChanStat, IdStat, ChartSeries, DbcSignalRow, SignalPickRow, I18n, Theme, ColW, Cell, HCell, SortHeader, TBtn, Icon, RibbonBtn, RibbonGroup, RibbonTab, ConvTab, SimGlyph, ThemedWindow } from "common.slint";
 
@@ -6,12 +7,12 @@ component TxHelpBlock inherits Rectangle {
     in property <string> heading;
     in property <string> body;
     in property <length> block-height: 104px;
-    height: root.block-height;
+    height: max(root.block-height, help-content.preferred-height);
     background: Theme.panel2;
     border-width: 1px;
     border-color: Theme.border;
     border-radius: 5px;
-    VerticalLayout {
+    help-content := VerticalLayout {
         padding: 10px;
         spacing: 5px;
         Text { text: root.heading; color: Theme.text; font-size: Theme.fs; font-weight: 800; }
@@ -24,12 +25,16 @@ export component TxWindow inherits ThemedWindow {
     icon: @image-url("logo.svg");
     preferred-width: 1080px;
     preferred-height: 700px;
-    min-width: 960px;
+    min-width: 820px;
     min-height: 620px;
     background: Theme.bg;
 
     in property <[TxRow]> txs;
     in-out property <int> tx-page: 0;
+    property <int> dbc-pick: -1;
+    property <bool> library-open: true;
+    property <length> library-width: 220px;
+    changed width => { root.library-width = root.width < 1000px ? 180px : 250px; }
     in-out property <string> tx-form-ch: "CAN1";
     in-out property <string> tx-form-id: "100";
     in-out property <string> tx-form-kind: "Std";
@@ -166,7 +171,7 @@ export component TxWindow inherits ThemedWindow {
 
         if root.tx-page == 0: VerticalLayout {
             Rectangle {
-                height: 186px;
+                height: 202px;
                 background: Theme.panel;
                 border-width: 1px; border-color: Theme.border;
                 Rectangle { x: 0; y: 0; width: 100%; height: 26px; background: Theme.header;
@@ -174,7 +179,7 @@ export component TxWindow inherits ThemedWindow {
                     Text { text: I18n.en ? "Frame Send" : "帧发送"; x: 8px; vertical-alignment: center; font-weight: 700; font-size: Theme.fs; color: Theme.text; }
                 }
                 VerticalLayout {
-                    x: 10px; y: 32px; width: parent.width - 20px; height: 146px;
+                    x: 10px; y: 32px; width: parent.width - 20px; height: 162px;
                     spacing: 4px; alignment: start;
                     HorizontalLayout { spacing: 6px;
                         Text { text: I18n.en ? "Channel" : "通道"; width: 64px; font-weight: 700; font-size: Theme.fs; vertical-alignment: center; color: Theme.text; }
@@ -194,7 +199,7 @@ export component TxWindow inherits ThemedWindow {
                         Text { text: "DLC"; width: 56px; font-weight: 700; font-size: Theme.fs; vertical-alignment: center; color: Theme.text; }
                         LineEdit { text: root.tx-form-dlc; width: 82px; height: Theme.ctrl-h; edited(v) => { root.tx-form-dlc-edited(v); } accepted(v) => { root.tx-form-dlc-committed(v); } }
                         Text { text: I18n.en ? "Data (hex)" : "数据 (hex)"; width: 72px; font-weight: 700; font-size: Theme.fs; vertical-alignment: center; color: Theme.text; }
-                        HexDataField { value: root.tx-form-data; width: 390px; edit-requested => { root.tx-data-editor-show(-1); } }
+                        HexDataField { value: root.tx-form-data; min-width: 160px; horizontal-stretch: 1; edit-requested => { root.tx-data-editor-show(-1); } }
                         Rectangle { horizontal-stretch: 1; }
                     }
                     HorizontalLayout { spacing: 6px;
@@ -205,7 +210,7 @@ export component TxWindow inherits ThemedWindow {
                         Text { text: I18n.en ? "Interval" : "间隔(ms)"; width: 72px; font-weight: 700; font-size: Theme.fs; vertical-alignment: center; color: Theme.text; }
                         LineEdit { text: root.tx-form-period; width: 90px; height: Theme.ctrl-h; edited(v) => { root.tx-form-period = v; } }
                         Text { text: I18n.en ? "Name" : "名称"; width: 40px; font-weight: 700; font-size: Theme.fs; vertical-alignment: center; color: Theme.text; }
-                        LineEdit { text: root.tx-form-name; width: 180px; height: Theme.ctrl-h; edited(v) => { root.tx-form-name = v; } }
+                        LineEdit { text: root.tx-form-name; min-width: 80px; horizontal-stretch: 1; height: Theme.ctrl-h; edited(v) => { root.tx-form-name = v; } }
                         Rectangle { horizontal-stretch: 1; }
                     }
                     HorizontalLayout { spacing: 8px;
@@ -280,7 +285,7 @@ export component TxWindow inherits ThemedWindow {
                                         }
                                     }
                                     TBtn { width: root.list-type-w; h: 26px; boxed: true; text: t.kind == "Ext" ? (I18n.en ? "Extended" : "扩展帧") : (I18n.en ? "Standard" : "标准帧"); active: t.kind == "Ext"; clicked => { root.tx-update(i, "type", t.kind == "Ext" ? "Std" : "Ext"); } }
-                                    Cell { text: t.count; w: root.list-count-w; mono: true; align: center; }
+                                    LineEdit { text: t.count; width: root.list-count-w; height: 26px; accepted(v) => { root.tx-update(i, "repeat", v); } }
                                     LineEdit { text: t.period; width: root.list-period-w; height: 26px; accepted(v) => { root.tx-update(i, "period", v); } }
                                     Cell { text: t.sent; w: root.list-sent-w; mono: true; align: center; }
                                     Rectangle {
@@ -319,26 +324,32 @@ export component TxWindow inherits ThemedWindow {
             }
         }
 
-        if root.tx-page == 1: HorizontalLayout {
+        if root.tx-page == 1: VerticalLayout {
+            spacing: 4px;
+            // Keep channel and library toggle accessible even when the library is collapsed.
+            Rectangle { height: 38px; background: Theme.panel2;
+                HorizontalLayout { padding: 4px; spacing: 6px;
+                    Text { text: I18n.en ? "Target Ch" : "目标通道"; vertical-alignment: center; font-size: Theme.fs; }
+                    ComboBox { width: 130px; model: root.channel-names; current-value <=> root.tx-dbc-ch; }
+                    TBtn { h: 30px; boxed: true; text: I18n.en ? "DBC library" : "DBC库"; active: root.library-open; clicked => { root.library-open = !root.library-open; } }
+                    Rectangle { horizontal-stretch: 1; }
+                }
+            }
+            HorizontalLayout {
             // 左：DBC 报文选择（双击添加）
             Rectangle {
-                width: 250px; background: Theme.panel; border-width: 1px; border-color: Theme.border;
+                width: root.library-open ? root.library-width : 0px; visible: root.library-open; clip: true; background: Theme.panel; border-width: 1px; border-color: Theme.border;
                 VerticalLayout {
-                    Rectangle { height: 38px; background: Theme.panel2;
-                        HorizontalLayout { padding: 4px; spacing: 6px;
-                            Text { text: I18n.en ? "Target Ch" : "目标通道"; vertical-alignment: center; font-size: Theme.fs; }
-                            ComboBox { width: 120px; model: root.channel-names; current-value <=> root.tx-dbc-ch; }
-                        }
-                    }
+                    TBtn { boxed: true; text: I18n.en ? "Add selected" : "添加选中报文"; btn-enabled: root.dbc-pick >= 0 && root.dbc-pick < root.tx-dbc-msgs.length; clicked => { root.tx-dbc-add(root.dbc-pick); } }
                     ListView {
                         for m[i] in root.tx-dbc-msgs: Rectangle {
                             height: Theme.big ? 28px : 24px;
-                            background: mta.has-hover ? Theme.accent-soft : (Math.mod(i, 2) == 0 ? Theme.panel : Theme.zebra);
-                            mta := TouchArea { clicked => { root.tx-dbc-add(i); } }
+                            background: (root.dbc-pick == i || mta.has-hover) ? Theme.accent-soft : (Math.mod(i, 2) == 0 ? Theme.panel : Theme.zebra);
+                            mta := TouchArea { clicked => { root.dbc-pick = i; } double-clicked => { root.dbc-pick = i; root.tx-dbc-add(i); } }
                             HorizontalLayout {
                                 padding-left: 8px; spacing: 5px;
                                 Rectangle { width: 16px; Icon { name: "send"; clr: Theme.accent; width: 13px; height: 13px; x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; } }
-                                Text { text: m; color: Theme.text; vertical-alignment: center; font-size: Theme.fs; overflow: elide; }
+                                Text { text: m; color: Theme.text; vertical-alignment: center; font-size: Theme.fs; overflow: elide; horizontal-stretch: 1; min-width: 0px; }
                             }
                         }
                     }
@@ -348,7 +359,10 @@ export component TxWindow inherits ThemedWindow {
                 }
             }
             // 右：发送列表 + 信号编辑
+            right-scroll := ScrollView {
+                viewport-width: max(900px, self.visible-width);
             VerticalLayout {
+                width: right-scroll.viewport-width; height: right-scroll.visible-height;
                 horizontal-stretch: 1;
                 padding: 6px;
                 spacing: 6px;
@@ -452,30 +466,42 @@ export component TxWindow inherits ThemedWindow {
                     }
                 }
             }
+            }
+
+            }
         }
 
-        if root.tx-page == 2: HorizontalLayout {
+        if root.tx-page == 2: VerticalLayout {
+            spacing: 4px;
+            // Keep channel and library toggle accessible even when the library is collapsed.
+            Rectangle { height: 38px; background: Theme.panel2;
+                HorizontalLayout { padding: 4px; spacing: 6px;
+                    Text { text: I18n.en ? "Target Ch" : "目标通道"; vertical-alignment: center; font-size: Theme.fs; }
+                    ComboBox { width: 130px; model: root.channel-names; current-value <=> root.tx-dbc-ch; }
+                    TBtn { h: 30px; boxed: true; text: I18n.en ? "DBC library" : "DBC库"; active: root.library-open; clicked => { root.library-open = !root.library-open; } }
+                    Rectangle { horizontal-stretch: 1; }
+                }
+            }
+            HorizontalLayout {
             // 左：DBC 报文选择
             Rectangle {
-                width: 250px; background: Theme.panel; border-width: 1px; border-color: Theme.border;
+                width: root.library-open ? root.library-width : 0px; visible: root.library-open; clip: true; background: Theme.panel; border-width: 1px; border-color: Theme.border;
                 VerticalLayout {
-                    Rectangle { height: 38px; background: Theme.panel2;
-                        HorizontalLayout { padding: 4px; spacing: 6px;
-                            Text { text: I18n.en ? "Target Ch" : "目标通道"; vertical-alignment: center; font-size: Theme.fs; }
-                            ComboBox { width: 110px; model: root.channel-names; current-value <=> root.tx-dbc-ch; }
-                        }
-                    }
+                    TBtn { boxed: true; text: I18n.en ? "Add selected" : "添加选中报文"; btn-enabled: root.dbc-pick >= 0 && root.dbc-pick < root.tx-dbc-msgs.length; clicked => { root.tx-dbc-add(root.dbc-pick); } }
                     ListView {
                         for m[i] in root.tx-dbc-msgs: Rectangle {
                             height: Theme.big ? 28px : 24px;
-                            background: cmta.has-hover ? Theme.accent-soft : (Math.mod(i, 2) == 0 ? Theme.panel : Theme.zebra);
-                            cmta := TouchArea { clicked => { root.tx-dbc-add(i); } }
+                            background: (root.dbc-pick == i || cmta.has-hover) ? Theme.accent-soft : (Math.mod(i, 2) == 0 ? Theme.panel : Theme.zebra);
+                            cmta := TouchArea { clicked => { root.dbc-pick = i; } double-clicked => { root.dbc-pick = i; root.tx-dbc-add(i); } }
                             Text { text: m; x: 8px; vertical-alignment: center; font-size: Theme.fs; color: Theme.text; overflow: elide; }
                         }
                     }
                 }
             }
+            vary-scroll := ScrollView {
+                viewport-width: max(900px, self.visible-width);
             VerticalLayout {
+                width: vary-scroll.viewport-width; height: vary-scroll.visible-height;
                 horizontal-stretch: 1;
                 padding: 6px;
                 spacing: 6px;
@@ -546,38 +572,30 @@ export component TxWindow inherits ThemedWindow {
                 Rectangle { vertical-stretch: 1; min-height: 0px; preferred-height: 0px;
                     // Use explicit positioning here so the variation panel reaches the right edge.
                     Rectangle {
-                        x: 0px; y: 0px; width: 430px; height: parent.height;
+                        x: 0px; y: 0px; width: parent.width * 0.48; height: parent.height;
                         background: Theme.panel; border-width: 1px; border-color: Theme.border;
-                            VerticalLayout { padding: 8px; spacing: 6px; alignment: start;
-                                Text { text: I18n.en ? "Signal Info" : "信号信息"; font-weight: 700; font-size: Theme.fs; color: Theme.text; }
-                                HorizontalLayout { spacing: 6px;
-                                    Text { text: I18n.en ? "Signal" : "信号名"; width: 64px; vertical-alignment: center; font-size: Theme.fs; }
-                                    Text { text: root.tx-sel-sig-name == "" ? "—" : root.tx-sel-sig-name; vertical-alignment: center; font-size: Theme.fs; color: Theme.accent; overflow: elide; horizontal-stretch: 1; }
+                            info-scroll := ScrollView {
+                                width: 100%; height: 100%; viewport-width: self.visible-width;
+                                VerticalLayout { width: info-scroll.visible-width; padding: 8px; spacing: 6px;
+                                    Text { text: I18n.en ? "Signal info" : "信号信息"; color: Theme.text; font-weight: 700; }
+                                    Text { text: root.tx-sel-sig-name; color: Theme.accent; wrap: word-wrap; }
+                                    HorizontalLayout {
+                                        Text { text: I18n.en ? "Actual" : "实际值"; width: 64px; color: Theme.text; vertical-alignment: center; }
+                                        LineEdit { text: root.tx-sel-sig-phys; horizontal-stretch: 1; edited(v) => { root.tx-sig-edit-phys(v); } }
+                                    }
+                                    HorizontalLayout {
+                                        Text { text: I18n.en ? "Raw" : "原始值"; width: 64px; color: Theme.text; vertical-alignment: center; }
+                                        LineEdit { text: root.tx-sel-sig-raw; horizontal-stretch: 1; edited(v) => { root.tx-sig-edit-raw(v); } }
+                                    }
+                                    Text { text: (I18n.en ? "Unit: " : "单位：") + root.tx-sel-sig-unit + "   " + (I18n.en ? "Factor: " : "比例：") + root.tx-sel-sig-factor; color: Theme.text-dim; wrap: word-wrap; }
+                                    Text { text: (I18n.en ? "Offset: " : "偏移：") + root.tx-sel-sig-offset + "   Bit: " + root.tx-sel-sig-startbit + " / " + root.tx-sel-sig-length; color: Theme.text-dim; wrap: word-wrap; }
+                                    Text { text: root.tx-sel-sig-comment; color: Theme.text-dim; wrap: word-wrap; }
                                 }
-                                HorizontalLayout { spacing: 6px;
-                                    Text { text: I18n.en ? "Actual" : "实际值"; width: 64px; vertical-alignment: center; font-size: Theme.fs; }
-                                    LineEdit { width: 120px; height: Theme.ctrl-h; text: root.tx-sel-sig-phys; edited(v) => { root.tx-sig-edit-phys(v); } }
-                                    Text { text: I18n.en ? "Raw" : "原始值"; width: 56px; vertical-alignment: center; font-size: Theme.fs; }
-                                    LineEdit { width: 120px; height: Theme.ctrl-h; text: root.tx-sel-sig-raw; edited(v) => { root.tx-sig-edit-raw(v); } }
-                                }
-                                HorizontalLayout { spacing: 6px;
-                                    Text { text: I18n.en ? "Unit" : "单位"; width: 64px; vertical-alignment: center; font-size: Theme.fs; }
-                                    Text { text: root.tx-sel-sig-unit; vertical-alignment: center; font-size: Theme.fs; color: Theme.text-dim; width: 120px; }
-                                    Text { text: I18n.en ? "Scale" : "比例"; width: 56px; vertical-alignment: center; font-size: Theme.fs; }
-                                    Text { text: root.tx-sel-sig-factor; vertical-alignment: center; font-size: Theme.fs; color: Theme.text-dim; }
-                                }
-                                HorizontalLayout { spacing: 6px;
-                                    Text { text: I18n.en ? "Offset" : "偏移"; width: 64px; vertical-alignment: center; font-size: Theme.fs; }
-                                    Text { text: root.tx-sel-sig-offset; vertical-alignment: center; font-size: Theme.fs; color: Theme.text-dim; width: 120px; }
-                                    Text { text: I18n.en ? "Start/Len" : "起始/位宽"; width: 56px; vertical-alignment: center; font-size: Theme.fs; }
-                                    Text { text: root.tx-sel-sig-startbit + " / " + root.tx-sel-sig-length; vertical-alignment: center; font-size: Theme.fs; color: Theme.text-dim; }
-                                }
-                                Text { text: root.tx-sel-sig-comment; font-size: Theme.fs-sm; color: Theme.text-dim; wrap: word-wrap; }
                             }
                         }
                         // 信号实际值变化
                         varybox := Rectangle {
-                            x: 438px; y: 0px; width: parent.width - self.x; height: parent.height;
+                            x: parent.width * 0.48 + 8px; y: 0px; width: parent.width - self.x; height: parent.height;
                             background: Theme.panel; border-width: 1px; border-color: Theme.border;
                             property <int> vpc: root.tx-vary-mode == 1 ? 3 : root.tx-vary-mode == 2 ? 4 : root.tx-vary-mode == 3 ? 6 : root.tx-vary-mode == 4 ? 6 : root.tx-vary-mode == 5 ? 4 : root.tx-vary-mode == 6 ? 2 : 0;
                             VerticalLayout { padding: 8px; spacing: 6px; alignment: start;
@@ -614,6 +632,9 @@ export component TxWindow inherits ThemedWindow {
                             }
                         }
                 }
+            }
+            }
+
             }
         }
 
@@ -676,7 +697,7 @@ export component TxWindow inherits ThemedWindow {
                             LineEdit { text: root.tx-file-path; height: Theme.ctrl-h; horizontal-stretch: 1; read-only: true; }
                             TBtn { text: "..."; clicked => { root.tx-file-pick(); } }
                         }
-                        Text { text: root.tx-file-status; font-size: Theme.fs; color: Theme.text; }
+                        Text { text: root.tx-file-status; font-size: Theme.fs; color: Theme.text; wrap: word-wrap; }
                         HorizontalLayout {
                             spacing: 6px;
                             Rectangle { height: 28px; horizontal-stretch: 1; background: Theme.panel2; border-width: 1px; border-color: Theme.border;
@@ -697,9 +718,9 @@ export component TxWindow inherits ThemedWindow {
                 horizontal-stretch: 1; background: Theme.panel; border-width: 1px; border-color: Theme.border;
                 Text { text: I18n.en ? "Custom interval list" : "自定义发送间隔列表"; x: 10px; y: 10px; font-size: Theme.fs; font-weight: 700; color: Theme.text; }
                 Rectangle { x: 8px; y: 48px; width: parent.width - 16px; height: 34px; background: Theme.header;
-                    Text { text: I18n.en ? "Frame idx        Delay(ms)        Multi-frame delay" : "帧索引        延时(ms)        倍数帧延时"; x: 42px; vertical-alignment: center; font-size: Theme.fs; color: Theme.text; }
+                    Text { text: I18n.en ? "Frame idx        Delay(ms)        Multi-frame delay" : "帧索引        延时(ms)        倍数帧延时"; x: 8px; width: parent.width - 16px; wrap: word-wrap; vertical-alignment: center; font-size: Theme.fs; color: Theme.text; }
                 }
-                Text { text: I18n.en ? "Delay is applied after the frame at the given index is sent.\nCustom delays override the per-send interval.\nFrame index starts from 1." : "帧索引对应的帧发送之后进行延时操作\n自定义延时会覆盖每次发送间隔\n帧索引从1开始"; x: 10px; y: parent.height - 100px; color: Theme.text; font-size: 14px; }
+                Text { text: I18n.en ? "Delay is applied after the frame at the given index is sent.\nCustom delays override the per-send interval.\nFrame index starts from 1." : "帧索引对应的帧发送之后进行延时操作\n自定义延时会覆盖每次发送间隔\n帧索引从1开始"; x: 10px; y: parent.height - 100px; width: parent.width - 20px; wrap: word-wrap; color: Theme.text; font-size: 14px; }
             }
         }
     }
@@ -716,8 +737,9 @@ export component TxWindow inherits ThemedWindow {
         apply-requested => { return root.tx-data-editor-apply(); }
     }
 
-    if root.help-open: Rectangle {
-        background: #00000070;
+    ProductModal {
+        open: root.help-open;
+        close-requested => { root.help-open = false; }
         TouchArea { clicked => { root.help-open = false; } }
         Rectangle {
             width: Math.min(920px, parent.width - 20px);
@@ -727,9 +749,9 @@ export component TxWindow inherits ThemedWindow {
             background: Theme.panel;
             border-width: 1px;
             border-color: Theme.border;
-            border-radius: 8px;
+            border-radius: ProductDesign.dialog-radius;
             VerticalLayout {
-                padding: 16px;
+                padding: ProductDesign.dialog-padding;
                 spacing: 12px;
                 HorizontalLayout {
                     spacing: 8px;
@@ -766,9 +788,9 @@ export component TxWindow inherits ThemedWindow {
                         border-radius: 5px;
                         help-scroll := ScrollView {
                             x: 0px; y: 0px; width: parent.width; height: parent.height;
-                            viewport-width: 700px;
+                            viewport-width: self.visible-width;
                             VerticalLayout {
-                                width: 700px;
+                                width: help-scroll.visible-width;
                                 padding: 10px;
                                 spacing: 8px;
                                 alignment: start;
@@ -791,7 +813,7 @@ export component TxWindow inherits ThemedWindow {
                                 if root.help-page == 1: VerticalLayout {
                                     spacing: 8px;
                                     TxHelpBlock { block-height: 86px; heading: "DBC发送能做什么"; body: "按 DBC 报文和信号的物理含义组织发送任务。用户只需填写物理值，软件自动换算原始值并重新编码整帧数据。"; }
-                                    TxHelpBlock { block-height: 136px; heading: "操作步骤"; body: "1. 先在主页加载 DBC；左侧为空通常表示尚未加载或 DBC 中没有报文。\n2. 选择目标通道，单击左侧报文将其加入任务列表；初始信号值为 0，默认间隔 100 ms。\n3. 单击任务行，再在下方信号表修改“实际值”，按 Enter 提交；原始值和 Data 会自动更新。\n4. 可修改任务次数、间隔，使用“发”单次发送或“周期”启动。"; }
+                                    TxHelpBlock { block-height: 136px; heading: "操作步骤"; body: "1. 先在主页加载 DBC；左侧为空通常表示尚未加载或 DBC 中没有报文。\n2. 选择目标通道，双击左侧报文或点击“添加选中报文”加入任务列表；初始信号值为 0，默认间隔 100 ms。\n3. 单击任务行，再在下方信号表修改“实际值”，按 Enter 提交；原始值和 Data 会自动更新。\n4. 可修改任务次数、间隔，使用“发”单次发送或“周期”启动。"; }
                                     TxHelpBlock { block-height: 116px; heading: "批量与速度"; body: "先选中一行，再用“次数→全部”或“间隔→全部”复制到所有任务。0.5×/1×/2×/5×会整体调整正在运行任务的发送速度。列表发送/停止控制全部任务；清空前会先停止周期发送。"; }
                                     TxHelpBlock { block-height: 106px; heading: "注意事项"; body: "物理值必须符合信号类型、位宽、比例、偏移及 DBC 定义范围。多路复用报文应确认当前 MUX 值对应的有效分支；未激活分支不会同时出现在同一帧中。修改正在周期发送的信号后，新编码会立即用于后续帧。"; }
                                 }

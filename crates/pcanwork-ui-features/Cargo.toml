@@ -10,3 +10,6 @@ slint = { version = "1.17.1", default-features = false, features = ["std", "comp
 
 [build-dependencies]
 slint-build = "1.17.1"
+
+[dev-dependencies]
+slint = { version = "1.17.1", default-features = false, features = ["std", "compat-1-2", "renderer-software"] }

@@ -9,6 +9,18 @@ use crate::{
 use slint::{Model, ModelRc, SharedString, VecModel};
 use std::rc::Rc;
 
+pub(crate) fn parse_tx_repeat(value: &str) -> i64 {
+    let value = value.trim();
+    if value.is_empty() {
+        return -1;
+    }
+    match value.parse::<i64>() {
+        Ok(n) if n > 0 => n,
+        Ok(_) => -1,
+        Err(_) => 1,
+    }
+}
+
 /// Build a `TxTask` from the "normal send" form fields.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn tx_task_from_form(
@@ -127,11 +139,7 @@ pub(crate) fn update_tx_task(a: &mut App, row: i32, field: &str, value: &str) {
         }
         "repeat" => {
             // Send count: -1 / empty / <=0 -> infinite loop; N>=1 -> send N times.
-            if value.is_empty() {
-                t.repeat = -1;
-            } else if let Ok(n) = value.parse::<i64>() {
-                t.repeat = if n <= 0 { -1 } else { n };
-            }
+            t.repeat = parse_tx_repeat(value);
         }
         _ => {}
     }
@@ -193,11 +201,7 @@ pub(crate) fn build_tx_data_editor_rows(data: &[u8], requested_len: usize) -> Mo
     ModelRc::from(Rc::new(VecModel::from(rows)))
 }
 
-pub(crate) fn edit_tx_data_editor_byte(
-    rows: &ModelRc<TxByteRow>,
-    index: usize,
-    value: &str,
-) {
+pub(crate) fn edit_tx_data_editor_byte(rows: &ModelRc<TxByteRow>, index: usize, value: &str) {
     let row_index = index / 8;
     let column = index % 8;
     let Some(row) = rows.row_data(row_index) else {
@@ -502,7 +506,7 @@ fn format_tx_data_summary(data: &[u8]) -> String {
 mod tx_data_display_tests {
     use super::{
         build_tx_data_editor_rows, collect_tx_data_editor, edit_tx_data_editor_byte,
-        format_tx_data_summary, parse_tx_task_data, paste_tx_data_editor,
+        format_tx_data_summary, parse_tx_repeat, parse_tx_task_data, paste_tx_data_editor,
     };
     use slint::Model;
 
@@ -515,10 +519,7 @@ mod tx_data_display_tests {
     #[test]
     fn can_fd_data_uses_summary_and_eight_byte_rows() {
         let data: Vec<u8> = (0..64).collect();
-        assert_eq!(
-            format_tx_data_summary(&data),
-            "00 01 02 03 … 3E 3F · 64B"
-        );
+        assert_eq!(format_tx_data_summary(&data), "00 01 02 03 … 3E 3F · 64B");
         let rows = build_tx_data_editor_rows(&data, data.len());
         assert_eq!(rows.row_count(), 8);
         assert_eq!(collect_tx_data_editor(&rows, 64).unwrap(), data);
@@ -538,6 +539,15 @@ mod tx_data_display_tests {
             collect_tx_data_editor(&rows, 8).unwrap(),
             [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77]
         );
+    }
+
+    #[test]
+    fn repeat_field_supports_finite_and_continuous_sending() {
+        assert_eq!(parse_tx_repeat("25"), 25);
+        assert_eq!(parse_tx_repeat("-1"), -1);
+        assert_eq!(parse_tx_repeat("0"), -1);
+        assert_eq!(parse_tx_repeat(""), -1);
+        assert_eq!(parse_tx_repeat("invalid"), 1);
     }
 }
 

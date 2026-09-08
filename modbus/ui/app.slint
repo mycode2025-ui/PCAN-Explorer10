@@ -1,5 +1,5 @@
 import { Button, ComboBox, LineEdit, SpinBox, ListView, ScrollView, CheckBox, TextEdit, Palette } from "std-widgets.slint";
-import { ProductDesign, ProductHeaderCheck, ProductI18n, ProductLanguageSwitch, ProductStatusDot, ProductThemeSwitch } from "../../ui/design-system.slint";
+import { ProductDesign, ProductDensitySwitch, ProductDialogSurface, ProductModal, ProductButton, ProductHeaderButton, ProductHeaderCheck, ProductI18n, ProductLanguageSwitch, ProductStatusDot, ProductThemeSwitch } from "../../ui/design-system.slint";
 
 export global I18n {
     in-out property <bool> en: ProductI18n.en;
@@ -112,54 +112,7 @@ global Theme {
 }
 
 // A filled accent (blue) action button, independent of the OS accent colour.
-component AccentButton inherits Rectangle {
-    in property <string> text;
-    in property <bool> enabled: true;
-    callback clicked;
-    height: ProductDesign.control-height;
-    horizontal-stretch: 0;
-    border-radius: 6px;
-    accessible-role: AccessibleRole.button;
-    accessible-label: root.text;
-    accessible-enabled: root.enabled;
-    forward-focus: key-focus;
-    accessible-action-default => { if (root.enabled) { root.clicked(); } }
-    border-width: key-focus.has-focus ? ProductDesign.focus-width : 0px;
-    border-color: ProductDesign.warning;
-    opacity: root.enabled ? 1.0 : 0.4;
-    background: ta.has-hover && root.enabled ? Theme.accent-2 : Theme.accent;
-    Text {
-        text: root.text;
-        color: Theme.accent-fg;
-        font-weight: 700;
-        width: 100%;
-        height: 100%;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-    }
-    ta := TouchArea {
-        width: 100%;
-        height: 100%;
-        mouse-cursor: root.enabled ? pointer : default;
-        clicked => {
-            if (root.enabled) {
-                root.clicked();
-            }
-        }
-    }
-    key-focus := FocusScope {
-        x: 0px;
-        width: 0px;
-        enabled: root.enabled;
-        key-pressed(event) => {
-            if event.text == Key.Return || event.text == " " {
-                root.clicked();
-                return accept;
-            }
-            return reject;
-        }
-    }
-}
+component AccentButton inherits ProductButton { primary: true; }
 
 component ToolBar inherits Rectangle {
     height: 44px;
@@ -172,60 +125,10 @@ component ToolBar inherits Rectangle {
 
 // Shared master/server toolbar action. Fixed geometry avoids native-style
 // preferred-height differences and keeps both role toolbars visually identical.
-component ToolAction inherits Rectangle {
-    in property <string> text;
-    in property <bool> enabled: true;
+component ToolAction inherits ProductButton {
     in property <length> action-width: 92px;
-    callback clicked;
-
     width: root.action-width;
-    height: ProductDesign.toolbar-control-height;
-    horizontal-stretch: 0;
-    y: ta.pressed && root.enabled ? 1px : 0px;
-    border-radius: ProductDesign.radius-sm;
-    border-width: key-focus.has-focus ? ProductDesign.focus-width : 1px;
-    border-color: key-focus.has-focus ? ProductDesign.warning : ProductDesign.border;
-    background: !root.enabled
-        ? ProductDesign.surface-raised
-        : ta.pressed
-            ? ProductDesign.selection
-            : ta.has-hover ? ProductDesign.brand-soft : ProductDesign.window;
-    opacity: root.enabled ? 1.0 : 0.52;
-    accessible-role: AccessibleRole.button;
-    accessible-label: root.text;
-    accessible-enabled: root.enabled;
-    forward-focus: key-focus;
-    accessible-action-default => { if root.enabled { root.clicked(); } }
-    animate background { duration: 140ms; }
-    animate y { duration: 80ms; }
-
-    label := Text {
-        text: root.text;
-        color: root.enabled ? ProductDesign.text : ProductDesign.text-muted;
-        font-family: ProductDesign.font-sans;
-        font-size: ProductDesign.font-md;
-        font-weight: 600;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        width: 100%;
-        height: 100%;
-        overflow: elide;
-    }
-    ta := TouchArea {
-        mouse-cursor: root.enabled ? pointer : default;
-        clicked => { if root.enabled { root.clicked(); } }
-    }
-    key-focus := FocusScope {
-        x: 0px; width: 0px;
-        enabled: root.enabled;
-        key-pressed(event) => {
-            if event.text == Key.Return || event.text == " " {
-                root.clicked();
-                return accept;
-            }
-            return reject;
-        }
-    }
+    h: ProductDesign.toolbar-control-height;
 }
 
 // A modern segmented switch (sliding white thumb on a translucent track).
@@ -267,7 +170,7 @@ component ModeSwitch inherits Rectangle {
             height: 100%;
             horizontal-alignment: center;
             vertical-alignment: center;
-            font-size: 14px;
+            font-size: ProductDesign.body-font-size;
             font-weight: 700;
             color: Theme.dark
                 ? (root.selected == 0 ? Theme.accent-fg : Theme.accent-fg-muted)
@@ -292,7 +195,7 @@ component ModeSwitch inherits Rectangle {
             height: 100%;
             horizontal-alignment: center;
             vertical-alignment: center;
-            font-size: 14px;
+            font-size: ProductDesign.body-font-size;
             font-weight: 700;
             color: Theme.dark
                 ? (root.selected == 1 ? Theme.accent-fg : Theme.accent-fg-muted)
@@ -326,17 +229,25 @@ component ModeSwitch inherits Rectangle {
 
 component Field inherits HorizontalLayout {
     in property <string> label;
-    height: 32px;
+    height: ProductDesign.form-control-height;
     spacing: 4px;
     Text {
-        width: 92px;
+        width: ProductDesign.form-label-width;
         text: root.label;
         vertical-alignment: center;
         horizontal-alignment: left;
-        overflow: elide;
+        wrap: word-wrap;
         opacity: 0.8;
     }
-    @children
+    Rectangle {
+        min-width: 0px;
+        horizontal-stretch: 1;
+        HorizontalLayout {
+            width: 100%;
+            height: 100%;
+            @children
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -371,9 +282,9 @@ component DataGrid inherits Rectangle {
     in property <bool> allow-autoinc: false;
 
     border-radius: 8px;
-    background: Palette.control-background;
+    background: ProductDesign.surface;
     border-width: 1px;
-    border-color: Palette.border;
+    border-color: ProductDesign.border;
     clip: true;
 
     in-out property <bool> menu-open: false;
@@ -383,8 +294,8 @@ component DataGrid inherits Rectangle {
 
     VerticalLayout {
         Rectangle {
-            height: 32px;
-            background: Palette.alternate-background;
+            height: ProductDesign.form-control-height;
+            background: ProductDesign.zebra;
             HorizontalLayout {
                 padding-left: 10px;
                 padding-right: 10px;
@@ -397,9 +308,9 @@ component DataGrid inherits Rectangle {
                         clicked => { root.addr-mode = Math.mod(root.addr-mode + 1, 3); }
                     }
                     Text {
-                        text: root.addr-mode == 1 ? "Addr(H)" : root.addr-mode == 2 ? "Addr(P)" : "Address";
+                        text: root.addr-mode == 1 ? I18n.t("地址(H)", "Addr(H)") : root.addr-mode == 2 ? I18n.t("地址(P)", "Addr(P)") : I18n.t("地址", "Address");
                         vertical-alignment: center; font-weight: 700;
-                        color: addr-hdr-ta.has-hover ? Theme.accent : Palette.foreground;
+                        color: addr-hdr-ta.has-hover ? Theme.accent : ProductDesign.text;
                     }
                 }
                 Text { horizontal-stretch: 1; text: I18n.t("数值", "Value"); vertical-alignment: center; font-weight: 700; }
@@ -411,7 +322,7 @@ component DataGrid inherits Rectangle {
                 height: 30px;
                 background:
                     i == root.selected-row ? Theme.accent-soft :
-                    (Math.mod(i, 2) == 0 ? transparent : Palette.alternate-background);
+                    (Math.mod(i, 2) == 0 ? transparent : ProductDesign.zebra);
                 row-ta := TouchArea {
                     width: 100%; height: 100%;
                     clicked => { root.selected-row = i; }
@@ -464,7 +375,7 @@ component DataGrid inherits Rectangle {
                                 text: i < root.rows.length ? ((root.addr-in-cell ? root.addr-text(i) + " = " : "") + root.rows[i].value) : "";
                                 vertical-alignment: center;
                                 font-size: root.grid-font;
-                                color: i < root.rows.length ? (root.rows[i].colored ? root.rows[i].vcolor : (val-ta.has-hover ? Theme.accent : Palette.foreground)) : Palette.foreground;
+                                color: i < root.rows.length ? (root.rows[i].colored ? root.rows[i].vcolor : (val-ta.has-hover ? Theme.accent : ProductDesign.text)) : ProductDesign.text;
                                 font-weight: i < root.rows.length ? (root.rows[i].colored ? 700 : 400) : 400;
                             }
                         }
@@ -491,9 +402,9 @@ component DataGrid inherits Rectangle {
         width: 168px;
         height: (root.allow-autoinc ? 6 : 5) * 30px + 2px;
         border-radius: 6px;
-        background: Palette.background;
+        background: ProductDesign.surface;
         border-width: 1px;
-        border-color: Palette.border;
+        border-color: ProductDesign.border;
         drop-shadow-blur: 12px;
         drop-shadow-color: Theme.shadow;
         clip: true;
@@ -501,7 +412,7 @@ component DataGrid inherits Rectangle {
             spacing: 0;
             for item[idx] in ["Write", "Set format…", "Copy value", "Delete row", "Show chart"]: Rectangle {
                 height: 30px;
-                background: item-ta.has-hover ? Palette.alternate-background : Palette.background;
+                background: item-ta.has-hover ? ProductDesign.zebra : ProductDesign.surface;
                 item-ta := TouchArea {
                     width: 100%; height: 100%;
                     mouse-cursor: pointer;
@@ -523,7 +434,7 @@ component DataGrid inherits Rectangle {
             }
             if root.allow-autoinc: Rectangle {
                 height: 30px;
-                background: ai-ta.has-hover ? Palette.alternate-background : Palette.background;
+                background: ai-ta.has-hover ? ProductDesign.zebra : ProductDesign.surface;
                 ai-ta := TouchArea {
                     width: 100%; height: 100%;
                     mouse-cursor: pointer;
@@ -546,9 +457,9 @@ component DataGrid inherits Rectangle {
 component LogPanel inherits Rectangle {
     in property <[LogLine]> lines;
     border-radius: 8px;
-    background: Palette.control-background;
+    background: ProductDesign.surface;
     border-width: 1px;
-    border-color: Palette.border;
+    border-color: ProductDesign.border;
     clip: true;
 
     ListView {
@@ -578,22 +489,22 @@ component ChartCard inherits Rectangle {
     in property <MiniChart> mc;
     height: 92px;
     border-radius: 8px;
-    background: Palette.control-background;
+    background: ProductDesign.surface;
     border-width: 1px;
-    border-color: Palette.border;
+    border-color: ProductDesign.border;
     HorizontalLayout {
         padding: 8px;
         spacing: 10px;
         VerticalLayout {
             width: 96px;
             Text { text: root.mc.name; font-weight: 700; color: root.mc.linecolor; }
-            Text { text: root.mc.ymax; font-size: 11px; opacity: 0.6; }
+            Text { text: root.mc.ymax; font-size: ProductDesign.font-xs; opacity: 0.6; }
             Rectangle { vertical-stretch: 1; }
-            Text { text: root.mc.ymin; font-size: 11px; opacity: 0.6; }
+            Text { text: root.mc.ymin; font-size: ProductDesign.font-xs; opacity: 0.6; }
         }
         Rectangle {
             horizontal-stretch: 1;
-            background: Palette.alternate-background;
+            background: ProductDesign.zebra;
             border-radius: 4px;
             clip: true;
             Path {
@@ -617,9 +528,9 @@ component ChartGrid inherits Rectangle {
     in property <[MiniChart]> charts;
     in property <bool> has-data;
     border-radius: 8px;
-    background: Palette.control-background;
+    background: ProductDesign.surface;
     border-width: 1px;
-    border-color: Palette.border;
+    border-color: ProductDesign.border;
     clip: true;
 
     if !root.has-data: Text {
@@ -653,9 +564,9 @@ component OverlayChart inherits Rectangle {
     property <float> view-span: 1.0;  // visible fraction (zoom)
 
     border-radius: 8px;
-    background: Palette.control-background;
+    background: ProductDesign.surface;
     border-width: 1px;
-    border-color: Palette.border;
+    border-color: ProductDesign.border;
     clip: true;
 
     if root.series.length == 0: Text {
@@ -673,23 +584,23 @@ component OverlayChart inherits Rectangle {
         HorizontalLayout {
             height: 28px;
             spacing: 6px;
-            Button {
+            ProductButton {
                 text: "+";
                 clicked => {
                     root.view-start = Math.max(0, Math.min(1 - root.view-span * 0.7, (root.view-start + root.view-span / 2) - root.view-span * 0.7 / 2));
                     root.view-span = Math.max(0.02, root.view-span * 0.7);
                 }
             }
-            Button {
+            ProductButton {
                 text: "−";
                 clicked => {
                     root.view-start = Math.max(0, Math.min(1 - Math.min(1.0, root.view-span / 0.7), (root.view-start + root.view-span / 2) - Math.min(1.0, root.view-span / 0.7) / 2));
                     root.view-span = Math.min(1.0, root.view-span / 0.7);
                 }
             }
-            Button { text: I18n.t("复位", "Reset"); clicked => { root.view-start = 0; root.view-span = 1.0; } }
-            Button { text: I18n.t("最新", "Latest"); clicked => { root.view-start = 1 - root.view-span; } }
-            Text { text: I18n.t("拖动平移 · 滚轮缩放 · 点击图例切换坐标轴", "drag = pan · wheel = zoom · click legend = swap axis"); font-size: 11px; opacity: 0.55; vertical-alignment: center; }
+            ProductButton { text: I18n.t("复位", "Reset"); clicked => { root.view-start = 0; root.view-span = 1.0; } }
+            ProductButton { text: I18n.t("最新", "Latest"); clicked => { root.view-start = 1 - root.view-span; } }
+            Text { text: I18n.t("拖动平移 · 滚轮缩放 · 点击图例切换坐标轴", "drag = pan · wheel = zoom · click legend = swap axis"); font-size: ProductDesign.font-xs; opacity: 0.55; vertical-alignment: center; }
             Rectangle { horizontal-stretch: 1; }
         }
 
@@ -705,7 +616,7 @@ component OverlayChart inherits Rectangle {
                 for s in root.series: Rectangle {
                     width: chip-row.preferred-width + 12px;
                     border-radius: 4px;
-                    background: chip-ta.has-hover ? Theme.accent-soft : Palette.alternate-background;
+                    background: chip-ta.has-hover ? Theme.accent-soft : ProductDesign.zebra;
                     chip-ta := TouchArea {
                         mouse-cursor: pointer;
                         clicked => { root.axis-toggle(s.addr, s.axis == 0 ? 1 : 0); }
@@ -715,7 +626,7 @@ component OverlayChart inherits Rectangle {
                         padding-right: 6px;
                         spacing: 5px;
                         Rectangle { width: 10px; height: 10px; border-radius: 2px; background: s.color; y: (parent.height - self.height) / 2; }
-                        Text { text: s.name + " (" + (s.axis == 1 ? "R" : "L") + ")"; font-size: 11px; vertical-alignment: center; }
+                        Text { text: s.name + " (" + (s.axis == 1 ? "R" : "L") + ")"; font-size: ProductDesign.font-xs; vertical-alignment: center; }
                     }
                 }
                 Rectangle { horizontal-stretch: 1; }
@@ -735,15 +646,15 @@ component OverlayChart inherits Rectangle {
             plot := Rectangle {
                 horizontal-stretch: 1;
                 clip: true;
-                background: Palette.alternate-background;
+                background: ProductDesign.zebra;
                 border-width: 1px;
-                border-color: Palette.border;
+                border-color: ProductDesign.border;
 
                 // horizontal gridlines
                 for k in 5: Rectangle {
                     y: plot.height * k / 4 - self.height / 2;
                     height: 1px;
-                    background: Palette.border;
+                    background: ProductDesign.border;
                     opacity: 0.4;
                 }
 
@@ -807,7 +718,7 @@ component Tab inherits Rectangle {
         x: 12px;
         vertical-alignment: center;
         height: 100%;
-        color: root.active ? Theme.accent-fg : Palette.foreground;
+        color: root.active ? Theme.accent-fg : ProductDesign.text;
         font-weight: root.active ? 700 : 400;
     }
     TouchArea {
@@ -836,11 +747,11 @@ component Tab inherits Rectangle {
 export component MasterChartWindow inherits Window {
     title: "Modbus — Chart";
     icon: @image-url("logo.svg");
-    preferred-width: 920px;
-    preferred-height: 540px;
+    preferred-width: 1000px;
+    preferred-height: 620px;
     min-width: 720px;
     min-height: 420px;
-    background: Palette.background;
+    background: ProductDesign.surface;
 
     in property <[ChartSeries]> series;
     in property <[MiniChart]> charts;
@@ -876,7 +787,7 @@ export component MasterChartWindow inherits Window {
                 Rectangle {
                     width: 46px; height: 18px; border-radius: 4px; background: Theme.accent;
                     y: (parent.height - self.height) / 2;
-                    Text { text: "CLIENT"; color: Theme.accent-fg; font-size: 10px; font-weight: 800; width: 100%; height: 100%; horizontal-alignment: center; vertical-alignment: center; }
+                    Text { text: I18n.t("客户端", "CLIENT"); color: Theme.accent-fg; font-size: 10px; font-weight: 800; width: 100%; height: 100%; horizontal-alignment: center; vertical-alignment: center; }
                 }
                 Text { text: root.ident; vertical-alignment: center; font-weight: 600; overflow: elide; horizontal-stretch: 1; }
             }
@@ -885,23 +796,23 @@ export component MasterChartWindow inherits Window {
             height: 40px;
             HorizontalLayout {
                 spacing: 8px;
-                Button { text: root.overlay ? "● Overlay" : "Overlay"; clicked => { root.overlay = true; } }
-                Button { text: !root.overlay ? "● Grid" : "Grid"; clicked => { root.overlay = false; } }
+                ProductButton { text: root.overlay ? "● Overlay" : "Overlay"; clicked => { root.overlay = true; } }
+                ProductButton { text: !root.overlay ? "● Grid" : "Grid"; clicked => { root.overlay = false; } }
                 Rectangle { width: 16px; }
-                Button { text: I18n.t("派生量…", "Derived…"); clicked => { root.open-derived(); } }
-                Button { text: I18n.t("缩放…", "Scaling…"); clicked => { root.open-scaling(); } }
-                Button { text: I18n.t("颜色…", "Colors…"); clicked => { root.open-colors(); } }
-                Button { text: I18n.t("数值名称…", "Value Names…"); clicked => { root.open-value-names(); } }
+                ProductButton { text: I18n.t("派生量…", "Derived…"); clicked => { root.open-derived(); } }
+                ProductButton { text: I18n.t("缩放…", "Scaling…"); clicked => { root.open-scaling(); } }
+                ProductButton { text: I18n.t("颜色…", "Colors…"); clicked => { root.open-colors(); } }
+                ProductButton { text: I18n.t("数值名称…", "Value Names…"); clicked => { root.open-value-names(); } }
                 Rectangle { width: 12px; }
-                Button { text: "<"; enabled: root.page-start > 0; clicked => { root.page-change(-1); } }
+                ProductButton { text: "<"; enabled: root.page-start > 0; clicked => { root.page-change(-1); } }
                 Text {
                     text: root.series-total == 0 ? "0 / 0" : "\{root.page-start + 1}-\{Math.min(root.page-start + 12, root.series-total)} / \{root.series-total}";
                     vertical-alignment: center;
                     horizontal-alignment: center;
                     min-width: 96px;
                 }
-                Button { text: ">"; enabled: root.page-start + 12 < root.series-total; clicked => { root.page-change(1); } }
-                Button { text: I18n.t("导出曲线", "Export Chart"); clicked => { root.export-chart(); } }
+                ProductButton { text: ">"; enabled: root.page-start + 12 < root.series-total; clicked => { root.page-change(1); } }
+                ProductButton { text: I18n.t("导出曲线", "Export Chart"); clicked => { root.export-chart(); } }
             }
         }
         if root.overlay: OverlayChart {
@@ -928,11 +839,11 @@ export component MasterChartWindow inherits Window {
 export component SlaveChartWindow inherits Window {
     title: "Modbus — Chart (Server)";
     icon: @image-url("logo.svg");
-    preferred-width: 920px;
-    preferred-height: 540px;
+    preferred-width: 1000px;
+    preferred-height: 620px;
     min-width: 720px;
     min-height: 420px;
-    background: Palette.background;
+    background: ProductDesign.surface;
 
     in property <[MiniChart]> charts;
     in property <bool> chart-has: false;
@@ -954,7 +865,7 @@ export component SlaveChartWindow inherits Window {
                 Rectangle {
                     width: 50px; height: 18px; border-radius: 4px; background: Theme.ok;
                     y: (parent.height - self.height) / 2;
-                    Text { text: "SERVER"; color: Theme.accent-fg; font-size: 10px; font-weight: 800; width: 100%; height: 100%; horizontal-alignment: center; vertical-alignment: center; }
+                    Text { text: I18n.t("服务端", "SERVER"); color: Theme.accent-fg; font-size: 10px; font-weight: 800; width: 100%; height: 100%; horizontal-alignment: center; vertical-alignment: center; }
                 }
                 Text { text: root.ident; vertical-alignment: center; font-weight: 600; overflow: elide; horizontal-stretch: 1; }
             }
@@ -963,9 +874,9 @@ export component SlaveChartWindow inherits Window {
             height: 40px;
             HorizontalLayout {
                 spacing: 8px;
-                Button { text: I18n.t("缩放…", "Scaling…"); clicked => { root.open-scaling(); } }
-                Button { text: I18n.t("颜色…", "Colors…"); clicked => { root.open-colors(); } }
-                Button { text: I18n.t("数值名称…", "Value Names…"); clicked => { root.open-value-names(); } }
+                ProductButton { text: I18n.t("缩放…", "Scaling…"); clicked => { root.open-scaling(); } }
+                ProductButton { text: I18n.t("颜色…", "Colors…"); clicked => { root.open-colors(); } }
+                ProductButton { text: I18n.t("数值名称…", "Value Names…"); clicked => { root.open-value-names(); } }
             }
         }
         ChartGrid {
@@ -980,12 +891,22 @@ export component SlaveChartWindow inherits Window {
 // Main window
 // ---------------------------------------------------------------------------
 export component AppWindow inherits Window {
+    property <length> page-gap: 12px;
+    property <length> connection-width: 300px;
+    property <bool> connection-open: true;
+    property <bool> narrow: false;
+    changed width => {
+        root.page-gap = ProductDesign.page-gap(root.width);
+        root.connection-width = ProductDesign.sidebar-width(root.width);
+        root.connection-open = root.width >= 1050px;
+        root.narrow = root.width < 1050px;
+    }
     title: "Modbus Tools";
     icon: @image-url("logo.svg");
     preferred-width: 1200px;
     preferred-height: 800px;
-    min-width: 1000px;
-    min-height: 660px;
+    min-width: 820px;
+    min-height: 560px;
     background: Theme.window;
     default-font-family: ProductDesign.font-sans;
     always-on-top: root.topmost-enabled;
@@ -1384,7 +1305,8 @@ export component AppWindow inherits Window {
                     horizontal-stretch: 0;
                 }
                 Rectangle { horizontal-stretch: 1; }
-                license-chip := Rectangle {
+                ProductHeaderButton { text: I18n.t("连接参数", "Connection"); clicked => { root.connection-open = !root.connection-open; } }
+                if !root.narrow: license-chip := Rectangle {
                     min-width: 104px;
                     preferred-width: 104px;
                     max-width: 104px;
@@ -1447,14 +1369,15 @@ export component AppWindow inherits Window {
                     min-width: 62px; preferred-width: 62px; max-width: 62px;
                     ProductLanguageSwitch { fixed-width: 62px; en <=> root.lang-en; }
                 }
+                ProductDensitySwitch { }
                 Rectangle {
                     min-width: 88px; preferred-width: 88px; max-width: 88px;
                     ProductThemeSwitch { fixed-width: 88px; dark <=> root.dark; }
                 }
                 Rectangle {
-                    min-width: 220px; preferred-width: 220px; max-width: 220px;
+                    min-width: 160px; preferred-width: 160px; max-width: 160px;
                     ModeSwitch {
-                        fixed-width: 220px;
+                        fixed-width: 160px;
                         height: ProductDesign.toolbar-control-height;
                         left-text: I18n.t("主站", "Client");
                         right-text: I18n.t("从站", "Server");
@@ -1466,15 +1389,16 @@ export component AppWindow inherits Window {
 
         // ===== Master page =====
         if root.active-mode == 0: HorizontalLayout {
-            padding: 12px;
-            spacing: 12px;
+            padding: root.page-gap;
+            spacing: root.page-gap;
 
             Rectangle {
-                width: 300px;
+                width: root.connection-open ? root.connection-width : 0px;
+                visible: root.connection-open; clip: true;
                 border-radius: 10px;
-                background: Palette.control-background;
+                background: ProductDesign.surface;
                 border-width: 1px;
-                border-color: Palette.border;
+                border-color: ProductDesign.border;
                 mscroll := ScrollView {
                     width: 100%;
                     height: 100%;
@@ -1491,7 +1415,7 @@ export component AppWindow inherits Window {
                         if root.m-transport != 0: Field { label: I18n.t("主机：", "Host:"); LineEdit { text <=> root.m-host; } }
                         if root.m-transport != 0: Field { label: I18n.t("端口：", "Port:"); SpinBox { value <=> root.m-port; minimum: 1; maximum: 65535; } }
                         if root.m-transport == 1: Field { label: "TLS:"; HorizontalLayout { spacing: 8px; CheckBox { text: "Modbus/TCP TLS"; checked <=> root.m-tls; } Rectangle { horizontal-stretch: 1; } } }
-                        if root.m-transport == 1 && root.m-tls: Field { label: I18n.t("CA 文件：", "CA file:"); HorizontalLayout { spacing: 4px; LineEdit { text <=> root.m-tls-ca; placeholder-text: I18n.t("服务器/CA PEM（空白=系统信任库）", "server/CA PEM (blank = system roots)"); } Button { text: "…"; width: 30px; clicked => { root.pick-m-tls-ca(); } } } }
+                        if root.m-transport == 1 && root.m-tls: Field { label: I18n.t("CA 文件：", "CA file:"); HorizontalLayout { spacing: 4px; LineEdit { text <=> root.m-tls-ca; placeholder-text: I18n.t("服务器/CA PEM（空白=系统信任库）", "server/CA PEM (blank = system roots)"); } ProductButton { text: "…"; width: 30px; clicked => { root.pick-m-tls-ca(); } } } }
                         if root.m-transport == 1 && root.m-tls: Field { label: I18n.t("域名：", "Domain:"); LineEdit { text <=> root.m-tls-domain; placeholder-text: I18n.t("SNI（空白=主机）", "SNI (blank = host)"); } }
                         if root.m-transport == 1 && root.m-tls: Field { label: I18n.t("版本：", "Version:"); ComboBox { model: [I18n.t("自动（1.2 + 1.3）", "Auto (1.2 + 1.3)"), I18n.t("仅 TLS 1.2", "TLS 1.2 only"), I18n.t("仅 TLS 1.3", "TLS 1.3 only")]; current-index <=> root.m-tls-version; } }
                         if root.m-transport == 1 && root.m-tls: Field { label: I18n.t("密码套件：", "Cipher:"); ComboBox { model: [I18n.t("自动（最强）", "Auto (strongest)"), "AES-128-GCM", "AES-256-GCM", "ChaCha20-256"]; current-index <=> root.m-tls-cipher; } }
@@ -1506,8 +1430,8 @@ export component AppWindow inherits Window {
                                 );
                             }
                         }
-                        if root.m-transport == 1 && root.m-tls: Field { label: I18n.t("客户端证书：", "Client cert:"); HorizontalLayout { spacing: 4px; LineEdit { text <=> root.m-tls-cert; placeholder-text: I18n.t("PEM（空白=不启用双向 TLS）", "PEM (blank = no mutual TLS)"); } Button { text: "…"; width: 30px; clicked => { root.pick-m-tls-cert(); } } } }
-                        if root.m-transport == 1 && root.m-tls: Field { label: I18n.t("客户端私钥：", "Client key:"); HorizontalLayout { spacing: 4px; LineEdit { text <=> root.m-tls-key; placeholder-text: "PEM"; } Button { text: "…"; width: 30px; clicked => { root.pick-m-tls-key(); } } } }
+                        if root.m-transport == 1 && root.m-tls: Field { label: I18n.t("客户端证书：", "Client cert:"); HorizontalLayout { spacing: 4px; LineEdit { text <=> root.m-tls-cert; placeholder-text: I18n.t("PEM（空白=不启用双向 TLS）", "PEM (blank = no mutual TLS)"); } ProductButton { text: "…"; width: 30px; clicked => { root.pick-m-tls-cert(); } } } }
+                        if root.m-transport == 1 && root.m-tls: Field { label: I18n.t("客户端私钥：", "Client key:"); HorizontalLayout { spacing: 4px; LineEdit { text <=> root.m-tls-key; placeholder-text: "PEM"; } ProductButton { text: "…"; width: 30px; clicked => { root.pick-m-tls-key(); } } } }
                         if root.m-transport == 0: Field { label: I18n.t("串口：", "Serial:"); LineEdit { text <=> root.m-serial; placeholder-text: "COM1"; } }
                         if root.m-transport == 0: Field { label: I18n.t("波特率：", "Baud:"); ComboBox { model: ["9600", "19200", "38400", "57600", "115200"]; current-index <=> root.m-baud-index; } }
                         if root.m-transport == 0: Field { label: I18n.t("数据位：", "Data bits:"); ComboBox { model: ["8", "7", "6", "5"]; current-index <=> root.m-databits-index; } }
@@ -1518,7 +1442,7 @@ export component AppWindow inherits Window {
                         Text { text: I18n.t("读写定义", "Read definition"); font-weight: 800; font-size: 15px; }
                         Field { label: I18n.t("从站 ID：", "Slave ID:"); SpinBox { value <=> root.m-slave-id; minimum: 0; maximum: 247; } }
                         Field { label: I18n.t("功能码：", "Function:"); ComboBox {
-                            model: ["01 Read Coils", "02 Read Discrete Inputs", "03 Read Holding Registers", "04 Read Input Registers", "05 Write Single Coil", "06 Write Single Register", "15 Write Multiple Coils", "16 Write Multiple Registers"];
+                            model: [I18n.t("01 读线圈", "01 Read Coils"), I18n.t("02 读离散输入", "02 Read Discrete Inputs"), I18n.t("03 读保持寄存器", "03 Read Holding Registers"), I18n.t("04 读输入寄存器", "04 Read Input Registers"), I18n.t("05 写单个线圈", "05 Write Single Coil"), I18n.t("06 写单个寄存器", "06 Write Single Register"), I18n.t("15 写多个线圈", "15 Write Multiple Coils"), I18n.t("16 写多个寄存器", "16 Write Multiple Registers")];
                             current-index <=> root.m-function;
                             selected => {
                                 root.m-quantity = min(root.m-quantity, min(root.quantity-limit(root.m-function), 65536 - root.m-address));
@@ -1561,8 +1485,8 @@ export component AppWindow inherits Window {
                         }
                         HorizontalLayout {
                             spacing: 8px;
-                            Button { text: I18n.t("写入…", "Write…"); horizontal-stretch: 1; clicked => { root.wd-func = root.m-function == 0 ? 0 : 1; root.wd-open = true; } }
-                            Button { text: I18n.t("扫描…", "Scan…"); horizontal-stretch: 1; clicked => { root.scan-open = true; } }
+                            ProductButton { text: I18n.t("写入…", "Write…"); horizontal-stretch: 1; clicked => { root.wd-func = root.m-function == 0 ? 0 : 1; root.wd-open = true; } }
+                            ProductButton { text: I18n.t("扫描…", "Scan…"); horizontal-stretch: 1; clicked => { root.scan-open = true; } }
                         }
                         Rectangle { vertical-stretch: 1; min-height: 8px; }
 
@@ -1570,16 +1494,16 @@ export component AppWindow inherits Window {
                         Rectangle {
                             height: stats-vl.preferred-height;
                             border-radius: 8px;
-                            background: Palette.alternate-background;
+                            background: ProductDesign.zebra;
                             border-width: 1px;
-                            border-color: Palette.border;
+                            border-color: ProductDesign.border;
                             stats-vl := VerticalLayout {
                                 padding: 10px;
                                 spacing: 5px;
-                                Text { text: I18n.t("统计", "Statistics"); font-weight: 800; font-size: 14px; }
+                                Text { text: I18n.t("统计", "Statistics"); font-weight: 800; font-size: ProductDesign.body-font-size; }
                                 HorizontalLayout { Text { text: I18n.t("轮询", "Polls"); opacity: 0.7; } Rectangle { horizontal-stretch: 1; } Text { text: "\{root.m-tx}"; font-weight: 600; } }
                                 HorizontalLayout { Text { text: I18n.t("响应", "Responses"); opacity: 0.7; } Rectangle { horizontal-stretch: 1; } Text { text: "\{root.m-rx}"; font-weight: 600; } }
-                                HorizontalLayout { Text { text: I18n.t("错误", "Errors"); opacity: 0.7; } Rectangle { horizontal-stretch: 1; } Text { text: "\{root.m-err}"; font-weight: 600; color: root.m-err > 0 ? Theme.err : Palette.foreground; } }
+                                HorizontalLayout { Text { text: I18n.t("错误", "Errors"); opacity: 0.7; } Rectangle { horizontal-stretch: 1; } Text { text: "\{root.m-err}"; font-weight: 600; color: root.m-err > 0 ? Theme.err : ProductDesign.text; } }
                                 HorizontalLayout { Text { text: I18n.t("成功率", "Success"); opacity: 0.7; } Rectangle { horizontal-stretch: 1; } Text { text: root.m-tx > 0 ? "\{Math.round(root.m-rx / root.m-tx * 100)}%" : "—"; font-weight: 600; color: Theme.ok; } }
                             }
                         }
@@ -1599,9 +1523,9 @@ export component AppWindow inherits Window {
                     for w in root.windows: Rectangle {
                         width: wtxt.preferred-width + 50px;
                         border-radius: 6px;
-                        background: w.id == root.active-win ? Theme.accent : Palette.control-background;
+                        background: w.id == root.active-win ? Theme.accent : ProductDesign.surface;
                         border-width: 1px;
-                        border-color: Palette.border;
+                        border-color: ProductDesign.border;
                         TouchArea { width: 100%; height: 100%; mouse-cursor: pointer; clicked => { root.active-win = w.id; root.select-window(w.id); } }
                         HorizontalLayout {
                             padding-left: 10px;
@@ -1615,28 +1539,20 @@ export component AppWindow inherits Window {
                             wtxt := Text {
                                 text: w.title;
                                 vertical-alignment: center;
-                                color: w.id == root.active-win ? Theme.accent-fg : Palette.foreground;
+                                color: w.id == root.active-win ? Theme.accent-fg : ProductDesign.text;
                             }
                             Rectangle {
                                 width: 18px;
                                 y: (parent.height - self.height) / 2;
                                 height: 18px;
                                 close-ta := TouchArea { mouse-cursor: pointer; clicked => { root.close-window(w.id); } }
-                                Text {
-                                    text: "×";
-                                    font-size: 14px;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    width: 100%; height: 100%;
-                                    color: w.id == root.active-win ? Theme.accent-fg : Palette.foreground;
-                                    opacity: close-ta.has-hover ? 1.0 : 0.45;
-                                }
+                                Image { source: @image-url("../../ui/icons/close.svg"); width: 16px; height: 16px; x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; colorize: ProductDesign.text-muted; }
                             }
                         }
                     }
                     } } // close tab HorizontalLayout + ScrollView
-                    Button { text: I18n.t("+ 新建", "+ New"); clicked => { root.new-window(); } }
-                    Button { text: I18n.t("浮动", "Float"); clicked => { root.float-window(); } }
+                    ProductButton { text: I18n.t("+ 新建", "+ New"); clicked => { root.new-window(); } }
+                    ProductButton { text: I18n.t("浮动", "Float"); clicked => { root.float-window(); } }
                 }
 
                 // 工具栏：横向 ScrollView 包裹，窄窗口下可横向滚动到全部按钮(不再挤出/裁剪)
@@ -1677,8 +1593,8 @@ export component AppWindow inherits Window {
                             y: (parent.height - self.height) / 2;
                             height: 20px;
                             Text {
-                                text: root.m-function >= 4 ? "WRITE" : "READ";
-                                color: Theme.accent-fg; font-size: 11px; font-weight: 800;
+                                text: root.m-function >= 4 ? I18n.t("写入", "WRITE") : I18n.t("读取", "READ");
+                                color: Theme.accent-fg; font-size: ProductDesign.font-xs; font-weight: 800;
                                 horizontal-alignment: center; vertical-alignment: center;
                             }
                         }
@@ -1713,14 +1629,14 @@ export component AppWindow inherits Window {
                 if root.m-function >= 4: Rectangle {
                     vertical-stretch: 1;
                     border-radius: 8px;
-                    background: Palette.control-background;
+                    background: ProductDesign.surface;
                     border-width: 1px;
-                    border-color: Palette.border;
+                    border-color: ProductDesign.border;
                     clip: true;
                     VerticalLayout {
                         Rectangle {
-                            height: 32px;
-                            background: Palette.alternate-background;
+                            height: ProductDesign.form-control-height;
+                            background: ProductDesign.zebra;
                             HorizontalLayout {
                                 padding-left: 10px;
                                 padding-right: 10px;
@@ -1734,7 +1650,7 @@ export component AppWindow inherits Window {
                             vertical-stretch: 1;
                             for row[i] in root.wl-rows: Rectangle {
                                 height: 30px;
-                                background: Math.mod(i, 2) == 0 ? transparent : Palette.alternate-background;
+                                background: Math.mod(i, 2) == 0 ? transparent : ProductDesign.zebra;
                                 HorizontalLayout {
                                     padding-left: 10px;
                                     padding-right: 10px;
@@ -1760,8 +1676,8 @@ export component AppWindow inherits Window {
                             height: 40px;
                             padding: 6px;
                             spacing: 10px;
-                            Button { text: I18n.t("写入一次", "Write Once"); enabled: root.m-connected; clicked => { root.master-write-once(); } }
-                            Button {
+                            ProductButton { text: I18n.t("写入一次", "Write Once"); enabled: root.m-connected; clicked => { root.master-write-once(); } }
+                            ProductButton {
                                 text: root.wl-active ? "Stop Auto" : "Start Auto";
                                 enabled: root.m-connected;
                                 clicked => {
@@ -1775,7 +1691,7 @@ export component AppWindow inherits Window {
                             Text {
                                 text: root.wl-active ? "running" : "stopped";
                                 vertical-alignment: center;
-                                color: root.wl-active ? Theme.ok : Palette.foreground;
+                                color: root.wl-active ? Theme.ok : ProductDesign.text;
                                 font-weight: 700;
                             }
                         }
@@ -1786,7 +1702,7 @@ export component AppWindow inherits Window {
                     Tab { label: I18n.t("事件日志", "Event Log"); active: root.m-bottom-tab == 0; clicked => { root.m-bottom-tab = 0; } }
                     Tab { label: I18n.t("通信流量", "Communication Traffic"); active: root.m-bottom-tab == 1; clicked => { root.m-bottom-tab = 1; } }
                     Rectangle { horizontal-stretch: 1; }
-                    Button { text: I18n.t("曲线窗口 ↗", "Chart Window ↗"); clicked => { root.open-master-chart(); } }
+                    ProductButton { text: I18n.t("曲线窗口 ↗", "Chart Window ↗"); clicked => { root.open-master-chart(); } }
                 }
                 if root.m-bottom-tab == 0: LogPanel { height: 190px; lines: root.m-log; }
                 if root.m-bottom-tab == 1: LogPanel { height: 190px; lines: root.m-traffic; }
@@ -1795,9 +1711,9 @@ export component AppWindow inherits Window {
                 Rectangle {
                     height: 30px;
                     border-radius: 8px;
-                    background: Palette.alternate-background;
+                    background: ProductDesign.zebra;
                     border-width: 1px;
-                    border-color: Palette.border;
+                    border-color: ProductDesign.border;
                     TouchArea { width: 100%; height: 100%; clicked => { root.show-conn-info(); root.conn-info-open = true; } }
                     HorizontalLayout {
                         padding-left: 12px;
@@ -1808,11 +1724,11 @@ export component AppWindow inherits Window {
                             active: root.m-connected;
                             warning: root.m-err > 0 || root.runtime-loss;
                         }
-                        Text { horizontal-stretch: 1; text: root.m-status; vertical-alignment: center; overflow: elide; font-size: 12px; }
-                        Text { text: root.runtime-health; color: root.runtime-loss ? Theme.err : Palette.foreground; vertical-alignment: center; font-size: 11px; }
-                        Text { text: "Tx: \{root.m-tx}"; vertical-alignment: center; font-size: 12px; }
-                        Text { text: "Rx: \{root.m-rx}"; vertical-alignment: center; font-size: 12px; }
-                        Text { text: "Err: \{root.m-err}"; vertical-alignment: center; font-size: 12px; color: root.m-err > 0 ? Theme.err : Palette.foreground; }
+                        Text { horizontal-stretch: 1; text: root.m-status; vertical-alignment: center; overflow: elide; font-size: ProductDesign.font-sm; }
+                        Text { text: root.runtime-health; color: root.runtime-loss ? Theme.err : ProductDesign.text; vertical-alignment: center; font-size: ProductDesign.font-xs; }
+                        Text { text: "Tx: \{root.m-tx}"; vertical-alignment: center; font-size: ProductDesign.font-sm; }
+                        Text { text: "Rx: \{root.m-rx}"; vertical-alignment: center; font-size: ProductDesign.font-sm; }
+                        Text { text: "Err: \{root.m-err}"; vertical-alignment: center; font-size: ProductDesign.font-sm; color: root.m-err > 0 ? Theme.err : ProductDesign.text; }
                     }
                 }
             }
@@ -1820,15 +1736,16 @@ export component AppWindow inherits Window {
 
         // ===== Slave page =====
         if root.active-mode == 1: HorizontalLayout {
-            padding: 12px;
-            spacing: 12px;
+            padding: root.page-gap;
+            spacing: root.page-gap;
 
             Rectangle {
-                width: 300px;
+                width: root.connection-open ? root.connection-width : 0px;
+                visible: root.connection-open; clip: true;
                 border-radius: 10px;
-                background: Palette.control-background;
+                background: ProductDesign.surface;
                 border-width: 1px;
-                border-color: Palette.border;
+                border-color: ProductDesign.border;
                 sscroll := ScrollView {
                     width: 100%;
                     height: 100%;
@@ -1851,12 +1768,12 @@ export component AppWindow inherits Window {
                         }
                         if root.s-transport != 0: Field { label: I18n.t("端口：", "Port:"); SpinBox { value <=> root.s-port; minimum: 1; maximum: 65535; } }
                         if root.s-transport == 1: Field { label: "TLS:"; HorizontalLayout { spacing: 8px; CheckBox { text: "Modbus/TCP TLS"; checked <=> root.s-tls; } Rectangle { horizontal-stretch: 1; } } }
-                        if root.s-transport == 1 && root.s-tls: Field { label: I18n.t("证书文件：", "Cert file:"); HorizontalLayout { spacing: 4px; LineEdit { text <=> root.s-tls-cert; placeholder-text: I18n.t("服务器证书 PEM", "server cert PEM"); } Button { text: "…"; width: 30px; clicked => { root.pick-s-tls-cert(); } } } }
-                        if root.s-transport == 1 && root.s-tls: Field { label: I18n.t("私钥文件：", "Key file:"); HorizontalLayout { spacing: 4px; LineEdit { text <=> root.s-tls-key; placeholder-text: I18n.t("私钥 PEM", "private key PEM"); } Button { text: "…"; width: 30px; clicked => { root.pick-s-tls-key(); } } } }
+                        if root.s-transport == 1 && root.s-tls: Field { label: I18n.t("证书文件：", "Cert file:"); HorizontalLayout { spacing: 4px; LineEdit { text <=> root.s-tls-cert; placeholder-text: I18n.t("服务器证书 PEM", "server cert PEM"); } ProductButton { text: "…"; width: 30px; clicked => { root.pick-s-tls-cert(); } } } }
+                        if root.s-transport == 1 && root.s-tls: Field { label: I18n.t("私钥文件：", "Key file:"); HorizontalLayout { spacing: 4px; LineEdit { text <=> root.s-tls-key; placeholder-text: I18n.t("私钥 PEM", "private key PEM"); } ProductButton { text: "…"; width: 30px; clicked => { root.pick-s-tls-key(); } } } }
                         if root.s-transport == 1 && root.s-tls: Field { label: I18n.t("版本：", "Version:"); ComboBox { model: [I18n.t("自动（1.2 + 1.3）", "Auto (1.2 + 1.3)"), I18n.t("仅 TLS 1.2", "TLS 1.2 only"), I18n.t("仅 TLS 1.3", "TLS 1.3 only")]; current-index <=> root.s-tls-version; } }
                         if root.s-transport == 1 && root.s-tls: Field { label: I18n.t("密码套件：", "Cipher:"); ComboBox { model: [I18n.t("自动（最强）", "Auto (strongest)"), "AES-128-GCM", "AES-256-GCM", "ChaCha20-256"]; current-index <=> root.s-tls-cipher; } }
                         if root.s-transport == 1 && root.s-tls: Field { label: ""; CheckBox { text: I18n.t("要求客户端证书", "Require client cert"); checked <=> root.s-tls-require; } }
-                        if root.s-transport == 1 && root.s-tls && root.s-tls-require: Field { label: I18n.t("客户端 CA：", "Client CA:"); HorizontalLayout { spacing: 4px; LineEdit { text <=> root.s-tls-cacert; placeholder-text: I18n.t("用于验证客户端的 CA PEM", "CA PEM to verify clients"); } Button { text: "…"; width: 30px; clicked => { root.pick-s-tls-cacert(); } } } }
+                        if root.s-transport == 1 && root.s-tls && root.s-tls-require: Field { label: I18n.t("客户端 CA：", "Client CA:"); HorizontalLayout { spacing: 4px; LineEdit { text <=> root.s-tls-cacert; placeholder-text: I18n.t("用于验证客户端的 CA PEM", "CA PEM to verify clients"); } ProductButton { text: "…"; width: 30px; clicked => { root.pick-s-tls-cacert(); } } } }
                         if root.s-transport == 0: Field { label: I18n.t("串口：", "Serial:"); LineEdit { text <=> root.s-serial; placeholder-text: "COM1"; } }
                         if root.s-transport == 0: Field { label: I18n.t("波特率：", "Baud:"); ComboBox { model: ["9600", "19200", "38400", "57600", "115200"]; current-index <=> root.s-baud-index; } }
                         if root.s-transport == 0: Field { label: I18n.t("数据位：", "Data bits:"); ComboBox { model: ["8", "7", "6", "5"]; current-index <=> root.s-databits-index; } }
@@ -1884,7 +1801,7 @@ export component AppWindow inherits Window {
                                 "Edit a Value cell and press Enter to set a register. Masters can poll and write live."
                             );
                             wrap: word-wrap;
-                            font-size: 12px;
+                            font-size: ProductDesign.font-sm;
                             opacity: 0.65;
                         }
                         Rectangle { vertical-stretch: 1; min-height: 8px; }
@@ -1893,16 +1810,16 @@ export component AppWindow inherits Window {
                         Rectangle {
                             height: sstats-vl.preferred-height;
                             border-radius: 8px;
-                            background: Palette.alternate-background;
+                            background: ProductDesign.zebra;
                             border-width: 1px;
-                            border-color: Palette.border;
+                            border-color: ProductDesign.border;
                             sstats-vl := VerticalLayout {
                                 padding: 10px;
                                 spacing: 5px;
-                                Text { text: I18n.t("统计", "Statistics"); font-weight: 800; font-size: 14px; }
+                                Text { text: I18n.t("统计", "Statistics"); font-weight: 800; font-size: ProductDesign.body-font-size; }
                                 HorizontalLayout { Text { text: I18n.t("请求", "Requests"); opacity: 0.7; } Rectangle { horizontal-stretch: 1; } Text { text: "\{root.s-requests}"; font-weight: 600; } }
-                                HorizontalLayout { Text { text: I18n.t("运行", "Running"); opacity: 0.7; } Rectangle { horizontal-stretch: 1; } Text { text: root.s-running ? I18n.t("是", "Yes") : I18n.t("否", "No"); font-weight: 600; color: root.s-running ? Theme.ok : Palette.foreground; } }
-                                HorizontalLayout { Text { text: I18n.t("仿真", "Simulating"); opacity: 0.7; } Rectangle { horizontal-stretch: 1; } Text { text: root.sim-active ? I18n.t("是", "Yes") : I18n.t("否", "No"); font-weight: 600; color: root.sim-active ? Theme.warn : Palette.foreground; } }
+                                HorizontalLayout { Text { text: I18n.t("运行", "Running"); opacity: 0.7; } Rectangle { horizontal-stretch: 1; } Text { text: root.s-running ? I18n.t("是", "Yes") : I18n.t("否", "No"); font-weight: 600; color: root.s-running ? Theme.ok : ProductDesign.text; } }
+                                HorizontalLayout { Text { text: I18n.t("仿真", "Simulating"); opacity: 0.7; } Rectangle { horizontal-stretch: 1; } Text { text: root.sim-active ? I18n.t("是", "Yes") : I18n.t("否", "No"); font-weight: 600; color: root.sim-active ? Theme.warn : ProductDesign.text; } }
                             }
                         }
                     }
@@ -1921,9 +1838,9 @@ export component AppWindow inherits Window {
                     for w in root.s-windows: Rectangle {
                         width: swtxt.preferred-width + 50px;
                         border-radius: 6px;
-                        background: w.id == root.s-active ? Theme.accent : Palette.control-background;
+                        background: w.id == root.s-active ? Theme.accent : ProductDesign.surface;
                         border-width: 1px;
-                        border-color: Palette.border;
+                        border-color: ProductDesign.border;
                         TouchArea { width: 100%; height: 100%; mouse-cursor: pointer; clicked => { root.s-active = w.id; root.select-slave-window(w.id); } }
                         HorizontalLayout {
                             padding-left: 10px;
@@ -1932,25 +1849,19 @@ export component AppWindow inherits Window {
                             swtxt := Text {
                                 text: w.title;
                                 vertical-alignment: center;
-                                color: w.id == root.s-active ? Theme.accent-fg : Palette.foreground;
+                                color: w.id == root.s-active ? Theme.accent-fg : ProductDesign.text;
                             }
                             Rectangle {
                                 width: 18px; height: 18px;
                                 y: (parent.height - self.height) / 2;
                                 sclose-ta := TouchArea { mouse-cursor: pointer; clicked => { root.close-slave-window(w.id); } }
-                                Text {
-                                    text: "×"; font-size: 14px;
-                                    horizontal-alignment: center; vertical-alignment: center;
-                                    width: 100%; height: 100%;
-                                    color: w.id == root.s-active ? Theme.accent-fg : Palette.foreground;
-                                    opacity: sclose-ta.has-hover ? 1.0 : 0.45;
-                                }
+                                Image { source: @image-url("../../ui/icons/close.svg"); width: 16px; height: 16px; x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; colorize: ProductDesign.text-muted; }
                             }
                         }
                     }
                     } } // close tab HorizontalLayout + ScrollView
-                    Button { text: I18n.t("+ 新建", "+ New"); clicked => { root.new-slave-window(); } }
-                    Button { text: I18n.t("浮动", "Float"); clicked => { root.float-slave-window(); } }
+                    ProductButton { text: I18n.t("+ 新建", "+ New"); clicked => { root.new-slave-window(); } }
+                    ProductButton { text: I18n.t("浮动", "Float"); clicked => { root.float-slave-window(); } }
                 }
 
                 ToolBar {
@@ -1989,7 +1900,7 @@ export component AppWindow inherits Window {
                             border-radius: 4px;
                             background: Theme.ok;
                             y: (parent.height - self.height) / 2;
-                            Text { text: "SERVER"; color: Theme.accent-fg; font-size: 11px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
+                            Text { text: I18n.t("服务端", "SERVER"); color: Theme.accent-fg; font-size: ProductDesign.font-xs; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
                         }
                         Text { text: root.slave-fc-label(root.s-area); vertical-alignment: center; font-weight: 700; }
                         Rectangle { horizontal-stretch: 1; }
@@ -2020,7 +1931,7 @@ export component AppWindow inherits Window {
                     Tab { label: I18n.t("事件日志", "Event Log"); active: root.s-bottom-tab == 0; clicked => { root.s-bottom-tab = 0; } }
                     Tab { label: I18n.t("通信流量", "Communication Traffic"); active: root.s-bottom-tab == 1; clicked => { root.s-bottom-tab = 1; } }
                     Rectangle { horizontal-stretch: 1; }
-                    Button { text: I18n.t("曲线窗口 ↗", "Chart Window ↗"); clicked => { root.open-slave-chart(); } }
+                    ProductButton { text: I18n.t("曲线窗口 ↗", "Chart Window ↗"); clicked => { root.open-slave-chart(); } }
                 }
                 if root.s-bottom-tab == 0: LogPanel { height: 190px; lines: root.s-log; }
                 if root.s-bottom-tab == 1: LogPanel { height: 190px; lines: root.s-traffic; }
@@ -2029,9 +1940,9 @@ export component AppWindow inherits Window {
                 Rectangle {
                     height: 30px;
                     border-radius: 8px;
-                    background: Palette.alternate-background;
+                    background: ProductDesign.zebra;
                     border-width: 1px;
-                    border-color: Palette.border;
+                    border-color: ProductDesign.border;
                     TouchArea { width: 100%; height: 100%; clicked => { root.show-conn-info(); root.conn-info-open = true; } }
                     HorizontalLayout {
                         padding-left: 12px;
@@ -2042,10 +1953,10 @@ export component AppWindow inherits Window {
                             active: root.s-running;
                             warning: root.runtime-loss;
                         }
-                        Text { horizontal-stretch: 1; text: root.s-status; vertical-alignment: center; overflow: elide; font-size: 12px; }
-                        Text { text: root.runtime-health; color: root.runtime-loss ? Theme.err : Palette.foreground; vertical-alignment: center; font-size: 11px; }
-                        Text { text: root.sim-active ? "Simulating" : ""; vertical-alignment: center; color: Theme.warn; font-size: 12px; }
-                        Text { text: "Requests: \{root.s-requests}"; vertical-alignment: center; font-size: 12px; }
+                        Text { horizontal-stretch: 1; text: root.s-status; vertical-alignment: center; overflow: elide; font-size: ProductDesign.font-sm; }
+                        Text { text: root.runtime-health; color: root.runtime-loss ? Theme.err : ProductDesign.text; vertical-alignment: center; font-size: ProductDesign.font-xs; }
+                        Text { text: root.sim-active ? "Simulating" : ""; vertical-alignment: center; color: Theme.warn; font-size: ProductDesign.font-sm; }
+                        Text { text: "Requests: \{root.s-requests}"; vertical-alignment: center; font-size: ProductDesign.font-sm; }
                     }
                 }
             }
@@ -2056,51 +1967,50 @@ export component AppWindow inherits Window {
     // =====================================================================
     // Write dialog
     // =====================================================================
-    if root.wd-open: Rectangle {
+    ProductModal {
+        open: root.wd-open;
+        close-requested => { root.wd-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea { width: 100%; height: 100%; clicked => { } }
-        Rectangle {
-            width: 460px;
-            height: 440px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 460px;
+            dialog-height: 440px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             VerticalLayout {
                 padding: 20px;
                 spacing: 10px;
-                Text { text: "Write to slave"; font-size: 17px; font-weight: 800; }
-                Field { label: "Type:"; ComboBox {
+                Text { text: I18n.t("写入从站", "Write to slave"); font-size: 17px; font-weight: 800; }
+                Field { label: I18n.t("类型：", "Type:"); ComboBox {
                     model: ["16-bit", "32-bit Int", "32-bit UInt", "32-bit Float", "64-bit Int", "64-bit UInt", "64-bit Double"];
                     current-index <=> root.wd-type;
                 } }
-                if root.wd-type == 0: Field { label: "Function:"; ComboBox {
-                    model: ["05 Write Single Coil", "06 Write Single Register", "15 Write Multiple Coils", "16 Write Multiple Registers"];
+                if root.wd-type == 0: Field { label: I18n.t("功能码：", "Function:"); ComboBox {
+                    model: [I18n.t("05 写单个线圈", "05 Write Single Coil"), I18n.t("06 写单个寄存器", "06 Write Single Register"), I18n.t("15 写多个线圈", "15 Write Multiple Coils"), I18n.t("16 写多个寄存器", "16 Write Multiple Registers")];
                     current-index <=> root.wd-func;
                 } }
-                if root.wd-type > 0: Field { label: "Byte order:"; ComboBox {
+                if root.wd-type > 0: Field { label: I18n.t("字节序：", "Byte order:"); ComboBox {
                     model: ["ABCD", "CDAB", "BADC", "DCBA"];
                     current-index <=> root.wd-order;
                 } }
-                Field { label: "Slave ID:"; Text { text: "\{root.m-slave-id}"; vertical-alignment: center; } }
-                Field { label: "Address:"; SpinBox { value <=> root.wd-address; minimum: 0; maximum: 65535; } }
-                Field { label: "Value(s):"; LineEdit { text <=> root.wd-text; placeholder-text: "123 / 0x1F / 3.14 / on"; } }
+                Field { label: I18n.t("从站 ID：", "Slave ID:"); Text { text: "\{root.m-slave-id}"; vertical-alignment: center; } }
+                Field { label: I18n.t("地址：", "Address:"); SpinBox { value <=> root.wd-address; minimum: 0; maximum: 65535; } }
+                Field { label: I18n.t("数值：", "Value(s):"); LineEdit { text <=> root.wd-text; placeholder-text: "123 / 0x1F / 3.14 / on"; } }
                 Text {
                     text: root.wd-type > 0
-                        ? "Enter one number; it is encoded across registers (FC16) using the byte order. e.g. 3.14159"
-                        : (root.wd-func >= 2 ? "Multiple write: separate values with commas (e.g. 10,20,30 or 1,0,1)." : "Single write: one value. Coils accept 0/1/on/off.");
-                    wrap: word-wrap; font-size: 12px; opacity: 0.65;
+                        ? I18n.t("输入一个数值，例如 3.14159；按字节序编码到多个寄存器，通过 FC16 写入。", "Enter one number; it is encoded across registers (FC16) using the byte order. e.g. 3.14159")
+                        : (root.wd-func >= 2 ? I18n.t("批量写入：以逗号分隔数值，例如 10,20,30 或 1,0,1。", "Multiple write: separate values with commas (e.g. 10,20,30 or 1,0,1).") : I18n.t("单次写入一个数值；线圈支持 0/1/on/off。", "Single write: one value. Coils accept 0/1/on/off."));
+                    wrap: word-wrap; font-size: ProductDesign.font-sm; opacity: 0.65;
                 }
                 Rectangle { vertical-stretch: 1; }
                 HorizontalLayout {
                     spacing: 10px;
                     Rectangle { horizontal-stretch: 1; }
-                    Button { text: "Cancel"; clicked => { root.wd-open = false; } }
-                    AccentButton { text: "Send"; width: 90px; clicked => { root.master-write(); root.wd-open = false; } }
+                    ProductButton { text: I18n.t("取消", "Cancel"); clicked => { root.wd-open = false; } }
+                    AccentButton { text: I18n.t("发送", "Send"); width: 90px; clicked => { root.master-write(); root.wd-open = false; } }
                 }
             }
         }
@@ -2109,46 +2019,45 @@ export component AppWindow inherits Window {
     // =====================================================================
     // FC22 / FC23 advanced client dialog (server already supports them)
     // =====================================================================
-    if root.adv-open: Rectangle {
+    ProductModal {
+        open: root.adv-open;
+        close-requested => { root.adv-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea { width: 100%; height: 100%; clicked => { } }
-        Rectangle {
-            width: 480px;
-            height: 430px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 480px;
+            dialog-height: 430px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             VerticalLayout {
                 padding: 20px;
                 spacing: 8px;
-                Text { text: "Advanced write — FC22 / FC23"; font-size: 17px; font-weight: 800; }
-                Text { text: "结果显示在下方 Event Log。Slave ID: \{root.m-slave-id}"; font-size: 12px; opacity: 0.65; }
+                Text { text: I18n.t("高级写入 — FC22 / FC23", "Advanced write — FC22 / FC23"); font-size: 17px; font-weight: 800; }
+                Text { text: "结果显示在下方 Event Log。Slave ID: \{root.m-slave-id}"; font-size: ProductDesign.font-sm; opacity: 0.65; }
 
-                Text { text: "FC22 · Mask Write Register"; font-weight: 700; }
-                Field { label: "Address:"; SpinBox { value <=> root.mw-addr; minimum: 0; maximum: 65535; } }
+                Text { text: I18n.t("FC22 · 掩码写寄存器", "FC22 · Mask Write Register"); font-weight: 700; }
+                Field { label: I18n.t("地址：", "Address:"); SpinBox { value <=> root.mw-addr; minimum: 0; maximum: 65535; } }
                 Field { label: "AND (hex):"; LineEdit { text <=> root.mw-and; placeholder-text: "FFFF"; } }
                 Field { label: "OR (hex):"; LineEdit { text <=> root.mw-or; placeholder-text: "0000"; } }
-                HorizontalLayout { Rectangle { horizontal-stretch: 1; } AccentButton { text: "Send FC22"; width: 110px; clicked => { root.master-mask-write(); } } }
+                HorizontalLayout { Rectangle { horizontal-stretch: 1; } AccentButton { text: I18n.t("发送 FC22", "Send FC22"); width: 110px; clicked => { root.master-mask-write(); } } }
 
-                Rectangle { height: 1px; background: Palette.border; }
+                Rectangle { height: 1px; background: ProductDesign.border; }
 
-                Text { text: "FC23 · Read/Write Multiple Registers"; font-weight: 700; }
+                Text { text: I18n.t("FC23 · 读写多个寄存器", "FC23 · Read/Write Multiple Registers"); font-weight: 700; }
                 HorizontalLayout {
                     spacing: 10px;
-                    Field { label: "Read addr:"; SpinBox { value <=> root.rw-read-addr; minimum: 0; maximum: 65535; } }
-                    Field { label: "Read qty:"; SpinBox { value <=> root.rw-read-qty; minimum: 1; maximum: 125; } }
+                    Field { label: I18n.t("读取地址：", "Read addr:"); SpinBox { value <=> root.rw-read-addr; minimum: 0; maximum: 65535; } }
+                    Field { label: I18n.t("读取数量：", "Read qty:"); SpinBox { value <=> root.rw-read-qty; minimum: 1; maximum: 125; } }
                 }
-                Field { label: "Write addr:"; SpinBox { value <=> root.rw-write-addr; minimum: 0; maximum: 65535; } }
-                Field { label: "Write vals:"; LineEdit { text <=> root.rw-write-vals; placeholder-text: "1 2 3 0x10"; } }
-                HorizontalLayout { Rectangle { horizontal-stretch: 1; } AccentButton { text: "Send FC23"; width: 110px; clicked => { root.master-read-write(); } } }
+                Field { label: I18n.t("写入地址：", "Write addr:"); SpinBox { value <=> root.rw-write-addr; minimum: 0; maximum: 65535; } }
+                Field { label: I18n.t("写入数值：", "Write vals:"); LineEdit { text <=> root.rw-write-vals; placeholder-text: "1 2 3 0x10"; } }
+                HorizontalLayout { Rectangle { horizontal-stretch: 1; } AccentButton { text: I18n.t("发送 FC23", "Send FC23"); width: 110px; clicked => { root.master-read-write(); } } }
 
                 Rectangle { vertical-stretch: 1; }
-                HorizontalLayout { Rectangle { horizontal-stretch: 1; } Button { text: "Close"; clicked => { root.adv-open = false; } } }
+                HorizontalLayout { Rectangle { horizontal-stretch: 1; } ProductButton { text: I18n.t("关闭", "Close"); clicked => { root.adv-open = false; } } }
             }
         }
     }
@@ -2156,33 +2065,32 @@ export component AppWindow inherits Window {
     // =====================================================================
     // Per-cell format dialog
     // =====================================================================
-    if root.cf-open: Rectangle {
+    ProductModal {
+        open: root.cf-open;
+        close-requested => { root.cf-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea { width: 100%; height: 100%; clicked => { } }
-        Rectangle {
-            width: 420px;
-            height: 230px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 420px;
+            dialog-height: 230px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             VerticalLayout {
                 padding: 20px;
                 spacing: 10px;
-                Text { text: "Register @\{root.cf-addr} format"; font-size: 17px; font-weight: 800; }
-                Field { label: "Format:"; ComboBox { model: Fmt.list; current-index <=> root.cf-fmt; } }
-                Text { text: "Applies to this register only; 32/64-bit spans the following registers."; wrap: word-wrap; font-size: 12px; opacity: 0.65; }
+                Text { text: I18n.t("寄存器 @", "Register @") + root.cf-addr + I18n.t(" 格式", " format"); font-size: 17px; font-weight: 800; }
+                Field { label: I18n.t("格式：", "Format:"); ComboBox { model: Fmt.list; current-index <=> root.cf-fmt; } }
+                Text { text: I18n.t("仅应用到此寄存器；32/64 位格式占用后续寄存器。", "Applies to this register only; 32/64-bit spans the following registers."); wrap: word-wrap; font-size: ProductDesign.font-sm; opacity: 0.65; }
                 Rectangle { vertical-stretch: 1; }
                 HorizontalLayout {
                     spacing: 10px;
-                    Button { text: "Use default"; clicked => { if (root.active-mode == 0) { root.master-cell-format-clear(); } else { root.slave-cell-format-clear(); } root.cf-open = false; } }
+                    ProductButton { text: I18n.t("恢复默认", "Use default"); clicked => { if (root.active-mode == 0) { root.master-cell-format-clear(); } else { root.slave-cell-format-clear(); } root.cf-open = false; } }
                     Rectangle { horizontal-stretch: 1; }
-                    Button { text: "Cancel"; clicked => { root.cf-open = false; } }
-                    AccentButton { text: "Apply"; width: 90px; clicked => { if (root.active-mode == 0) { root.master-cell-format(); } else { root.slave-cell-format(); } root.cf-open = false; } }
+                    ProductButton { text: I18n.t("取消", "Cancel"); clicked => { root.cf-open = false; } }
+                    AccentButton { text: I18n.t("应用", "Apply"); width: 90px; clicked => { if (root.active-mode == 0) { root.master-cell-format(); } else { root.slave-cell-format(); } root.cf-open = false; } }
                 }
             }
         }
@@ -2191,61 +2099,59 @@ export component AppWindow inherits Window {
     // =====================================================================
     // Derived channels dialog
     // =====================================================================
-    if root.dv-open: Rectangle {
+    ProductModal {
+        open: root.dv-open;
+        close-requested => { root.dv-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea { width: 100%; height: 100%; clicked => { } }
-        Rectangle {
-            width: 480px;
-            height: 420px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 480px;
+            dialog-height: 420px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             VerticalLayout {
                 padding: 20px;
                 spacing: 10px;
-                Text { text: "Derived channels"; font-size: 17px; font-weight: 800; }
+                Text { text: I18n.t("计算通道", "Derived channels"); font-size: 17px; font-weight: 800; }
                 Text {
-                    text: "One \"name = formula\" per line. Use r0, r1, … for polled registers; + - * / % & | ^ << >> and ( ) are supported.";
-                    wrap: word-wrap; font-size: 12px; opacity: 0.65;
+                    text: I18n.t("每行输入“名称 = 公式”，用 r0、r1 等引用轮询寄存器；支持 + - * / % & | ^ << >> 和括号。", "One \"name = formula\" per line. Use r0, r1, … for polled registers; + - * / % & | ^ << >> and ( ) are supported.");
+                    wrap: word-wrap; font-size: ProductDesign.font-sm; opacity: 0.65;
                 }
                 TextEdit { vertical-stretch: 1; text <=> root.dv-text; }
                 HorizontalLayout {
                     spacing: 10px;
                     Rectangle { horizontal-stretch: 1; }
-                    Button { text: "Cancel"; clicked => { root.dv-open = false; } }
-                    AccentButton { text: "Apply"; width: 90px; clicked => { root.master-derived(); root.dv-open = false; } }
+                    ProductButton { text: I18n.t("取消", "Cancel"); clicked => { root.dv-open = false; } }
+                    AccentButton { text: I18n.t("应用", "Apply"); width: 90px; clicked => { root.master-derived(); root.dv-open = false; } }
                 }
             }
         }
     }
 
     // ---- View options dialog ----
-    if root.vw-open: Rectangle {
+    ProductModal {
+        open: root.vw-open;
+        close-requested => { root.vw-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea { width: 100%; height: 100%; clicked => { } }
-        Rectangle {
-            width: 420px;
-            height: 300px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 420px;
+            dialog-height: 300px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             VerticalLayout {
                 padding: 20px;
                 spacing: 14px;
-                Text { text: "View options"; font-size: 17px; font-weight: 800; }
+                Text { text: I18n.t("显示设置", "View options"); font-size: 17px; font-weight: 800; }
                 HorizontalLayout {
                     spacing: 10px;
-                    Text { text: "Address format"; vertical-alignment: center; width: 130px; }
+                    Text { text: I18n.t("地址格式", "Address format"); vertical-alignment: center; width: 130px; }
                     ComboBox {
                         horizontal-stretch: 1;
                         model: ["Decimal", "Hex", "PLC (base-1)"];
@@ -2254,23 +2160,23 @@ export component AppWindow inherits Window {
                 }
                 HorizontalLayout {
                     spacing: 10px;
-                    Text { text: "Address in value cell"; vertical-alignment: center; width: 130px; }
+                    Text { text: I18n.t("数值单元格内显示地址", "Address in value cell"); vertical-alignment: center; width: 130px; }
                     CheckBox { checked <=> root.addr-in-cell; }
                     Rectangle { horizontal-stretch: 1; }
                 }
                 HorizontalLayout {
                     spacing: 10px;
-                    Text { text: "Font size"; vertical-alignment: center; width: 130px; }
-                    Button { text: "A−"; clicked => { if root.grid-font > 10px { root.grid-font -= 1px; } } }
+                    Text { text: I18n.t("字号", "Font size"); vertical-alignment: center; width: 130px; }
+                    ProductButton { text: "A−"; clicked => { if root.grid-font > 10px { root.grid-font -= 1px; } } }
                     Text { text: "\{round(root.grid-font / 1px)} px"; vertical-alignment: center; }
-                    Button { text: "A+"; clicked => { if root.grid-font < 22px { root.grid-font += 1px; } } }
+                    ProductButton { text: "A+"; clicked => { if root.grid-font < 22px { root.grid-font += 1px; } } }
                     Rectangle { horizontal-stretch: 1; }
                 }
                 Rectangle { vertical-stretch: 1; }
                 HorizontalLayout {
                     spacing: 10px;
                     Rectangle { horizontal-stretch: 1; }
-                    AccentButton { text: "Close"; width: 90px; clicked => { root.vw-open = false; } }
+                    AccentButton { text: I18n.t("关闭", "Close"); width: 90px; clicked => { root.vw-open = false; } }
                 }
             }
         }
@@ -2279,38 +2185,37 @@ export component AppWindow inherits Window {
     // =====================================================================
     // Scan dialog
     // =====================================================================
-    if root.scan-open: Rectangle {
+    ProductModal {
+        open: root.scan-open;
+        close-requested => { root.scan-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea { width: 100%; height: 100%; clicked => { } }
-        Rectangle {
-            width: 560px;
-            height: 560px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 560px;
+            dialog-height: 560px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             VerticalLayout {
                 padding: 20px;
                 spacing: 8px;
-                Text { text: "Scan"; font-size: 17px; font-weight: 800; }
-                Text { text: "Uses the Master connection settings. Stop polling first if on the same serial port."; wrap: word-wrap; font-size: 12px; opacity: 0.6; }
-                Field { label: "Type:"; ComboBox { model: ["Address Scan", "Slave ID Scan"]; current-index <=> root.sc-type; } }
-                Field { label: "Function:"; ComboBox { model: ["0x Read Coils", "1x Read Discrete Inputs", "4x Read Holding Registers", "3x Read Input Registers"]; current-index <=> root.sc-func; } }
-                if root.sc-type == 0: Field { label: "Start:"; SpinBox { value <=> root.sc-start; minimum: 0; maximum: 65535; } }
-                if root.sc-type == 0: Field { label: "Count:"; SpinBox { value <=> root.sc-count; minimum: 1; maximum: 2000; } }
-                if root.sc-type == 1: Field { label: "Probe addr:"; SpinBox { value <=> root.sc-addr; minimum: 0; maximum: 65535; } }
-                if root.sc-type == 1: Field { label: "From ID:"; SpinBox { value <=> root.sc-fromid; minimum: 0; maximum: 247; } }
-                if root.sc-type == 1: Field { label: "To ID:"; SpinBox { value <=> root.sc-toid; minimum: 0; maximum: 247; } }
+                Text { text: I18n.t("扫描", "Scan"); font-size: 17px; font-weight: 800; }
+                Text { text: I18n.t("使用主站连接设置；使用同一串口时请先停止轮询。", "Uses the Master connection settings. Stop polling first if on the same serial port."); wrap: word-wrap; font-size: ProductDesign.font-sm; opacity: 0.6; }
+                Field { label: I18n.t("类型：", "Type:"); ComboBox { model: [I18n.t("地址扫描", "Address Scan"), I18n.t("从站 ID 扫描", "Slave ID Scan")]; current-index <=> root.sc-type; } }
+                Field { label: I18n.t("功能码：", "Function:"); ComboBox { model: [I18n.t("0x 读线圈", "0x Read Coils"), I18n.t("1x 读离散输入", "1x Read Discrete Inputs"), I18n.t("4x 读保持寄存器", "4x Read Holding Registers"), I18n.t("3x 读输入寄存器", "3x Read Input Registers")]; current-index <=> root.sc-func; } }
+                if root.sc-type == 0: Field { label: I18n.t("起始：", "Start:"); SpinBox { value <=> root.sc-start; minimum: 0; maximum: 65535; } }
+                if root.sc-type == 0: Field { label: I18n.t("数量：", "Count:"); SpinBox { value <=> root.sc-count; minimum: 1; maximum: 2000; } }
+                if root.sc-type == 1: Field { label: I18n.t("探测地址：", "Probe addr:"); SpinBox { value <=> root.sc-addr; minimum: 0; maximum: 65535; } }
+                if root.sc-type == 1: Field { label: I18n.t("起始 ID：", "From ID:"); SpinBox { value <=> root.sc-fromid; minimum: 0; maximum: 247; } }
+                if root.sc-type == 1: Field { label: I18n.t("结束 ID：", "To ID:"); SpinBox { value <=> root.sc-toid; minimum: 0; maximum: 247; } }
                 HorizontalLayout {
                     spacing: 10px;
-                    AccentButton { text: "Start"; width: 90px; clicked => { root.sc-type == 0 ? root.master-scan-address() : root.master-scan-slave(); } }
-                    Button { text: "Stop"; clicked => { root.master-scan-stop(); } }
+                    AccentButton { text: I18n.t("启动", "Start"); width: 90px; clicked => { root.sc-type == 0 ? root.master-scan-address() : root.master-scan-slave(); } }
+                    ProductButton { text: I18n.t("停止", "Stop"); clicked => { root.master-scan-stop(); } }
                     Rectangle { horizontal-stretch: 1; }
-                    Button { text: "Close"; clicked => { root.scan-open = false; } }
+                    ProductButton { text: I18n.t("关闭", "Close"); clicked => { root.scan-open = false; } }
                 }
                 Text { text: root.scan-status; opacity: 0.8; }
                 LogPanel { vertical-stretch: 1; lines: root.scan-rows; }
@@ -2321,37 +2226,36 @@ export component AppWindow inherits Window {
     // =====================================================================
     // Scaling dialog
     // =====================================================================
-    if root.scl-open: Rectangle {
+    ProductModal {
+        open: root.scl-open;
+        close-requested => { root.scl-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea { width: 100%; height: 100%; clicked => { } }
-        Rectangle {
-            width: 460px;
-            height: 380px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 460px;
+            dialog-height: 380px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             VerticalLayout {
                 padding: 20px;
                 spacing: 10px;
-                Text { text: "Scaling (linear)"; font-size: 17px; font-weight: 800; }
-                Field { label: "Enabled:"; CheckBox { checked <=> root.scl-enabled; } }
-                Field { label: "Raw X1:"; LineEdit { text <=> root.scl-x1; } }
-                Field { label: "Eng Y1:"; LineEdit { text <=> root.scl-y1; } }
-                Field { label: "Raw X2:"; LineEdit { text <=> root.scl-x2; } }
-                Field { label: "Eng Y2:"; LineEdit { text <=> root.scl-y2; } }
-                Field { label: "Decimals:"; SpinBox { value <=> root.scl-decimals; minimum: 0; maximum: 6; } }
-                Text { text: "Y = m·(X − X1) + Y1.  Applies to numeric register formats."; wrap: word-wrap; font-size: 12px; opacity: 0.65; }
+                Text { text: I18n.t("线性换算", "Scaling (linear)"); font-size: 17px; font-weight: 800; }
+                Field { label: I18n.t("启用：", "Enabled:"); CheckBox { checked <=> root.scl-enabled; } }
+                Field { label: I18n.t("原始值 X1：", "Raw X1:"); LineEdit { text <=> root.scl-x1; } }
+                Field { label: I18n.t("物理值 Y1：", "Eng Y1:"); LineEdit { text <=> root.scl-y1; } }
+                Field { label: I18n.t("原始值 X2：", "Raw X2:"); LineEdit { text <=> root.scl-x2; } }
+                Field { label: I18n.t("物理值 Y2：", "Eng Y2:"); LineEdit { text <=> root.scl-y2; } }
+                Field { label: I18n.t("小数位：", "Decimals:"); SpinBox { value <=> root.scl-decimals; minimum: 0; maximum: 6; } }
+                Text { text: I18n.t("Y = m·(X − X1) + Y1，适用于数值寄存器格式。", "Y = m·(X − X1) + Y1.  Applies to numeric register formats."); wrap: word-wrap; font-size: ProductDesign.font-sm; opacity: 0.65; }
                 Rectangle { vertical-stretch: 1; }
                 HorizontalLayout {
                     spacing: 10px;
                     Rectangle { horizontal-stretch: 1; }
-                    Button { text: "Cancel"; clicked => { root.scl-open = false; } }
-                    AccentButton { text: "Apply"; width: 90px; clicked => { root.active-mode == 0 ? root.master-scaling() : root.slave-scaling(); root.scl-open = false; } }
+                    ProductButton { text: I18n.t("取消", "Cancel"); clicked => { root.scl-open = false; } }
+                    AccentButton { text: I18n.t("应用", "Apply"); width: 90px; clicked => { root.active-mode == 0 ? root.master-scaling() : root.slave-scaling(); root.scl-open = false; } }
                 }
             }
         }
@@ -2360,43 +2264,42 @@ export component AppWindow inherits Window {
     // =====================================================================
     // Colors dialog
     // =====================================================================
-    if root.col-open: Rectangle {
+    ProductModal {
+        open: root.col-open;
+        close-requested => { root.col-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea { width: 100%; height: 100%; clicked => { } }
-        Rectangle {
-            width: 540px;
-            height: 360px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 540px;
+            dialog-height: 360px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             VerticalLayout {
                 padding: 20px;
                 spacing: 10px;
-                Text { text: "Conditional colours"; font-size: 17px; font-weight: 800; }
-                Field { label: "Normal:"; ComboBox { model: Fmt.palette; current-index <=> root.col-normal; } }
-                Field { label: "Rule 1:"; HorizontalLayout { spacing: 6px;
+                Text { text: I18n.t("条件颜色", "Conditional colours"); font-size: 17px; font-weight: 800; }
+                Field { label: I18n.t("默认：", "Normal:"); ComboBox { model: Fmt.palette; current-index <=> root.col-normal; } }
+                Field { label: I18n.t("规则 1：", "Rule 1:"); HorizontalLayout { spacing: 6px;
                     ComboBox { width: 90px; model: Fmt.ops; current-index <=> root.col-op1; }
-                    LineEdit { width: 110px; text <=> root.col-v1; placeholder-text: "value"; }
+                    LineEdit { width: 110px; text <=> root.col-v1; placeholder-text: I18n.t("数值", "value"); }
                     ComboBox { model: Fmt.palette; current-index <=> root.col-c1; }
                 } }
-                Field { label: "Rule 2:"; HorizontalLayout { spacing: 6px;
+                Field { label: I18n.t("规则 2：", "Rule 2:"); HorizontalLayout { spacing: 6px;
                     ComboBox { width: 90px; model: Fmt.ops; current-index <=> root.col-op2; }
-                    LineEdit { width: 110px; text <=> root.col-v2; placeholder-text: "value"; }
+                    LineEdit { width: 110px; text <=> root.col-v2; placeholder-text: I18n.t("数值", "value"); }
                     ComboBox { model: Fmt.palette; current-index <=> root.col-c2; }
                 } }
-                Text { text: "Rule 1 takes precedence. AND treats the value as a bitmask (hex/decimal)."; wrap: word-wrap; font-size: 12px; opacity: 0.65; }
+                Text { text: I18n.t("规则 1 优先；AND 按位掩码处理数值（支持十六进制和十进制）。", "Rule 1 takes precedence. AND treats the value as a bitmask (hex/decimal)."); wrap: word-wrap; font-size: ProductDesign.font-sm; opacity: 0.65; }
                 Rectangle { vertical-stretch: 1; }
                 HorizontalLayout {
                     spacing: 10px;
-                    Button { text: "Clear"; clicked => { root.col-op1 = 0; root.col-op2 = 0; root.col-normal = 0; root.active-mode == 0 ? root.master-colors() : root.slave-colors(); } }
+                    ProductButton { text: I18n.t("清除", "Clear"); clicked => { root.col-op1 = 0; root.col-op2 = 0; root.col-normal = 0; root.active-mode == 0 ? root.master-colors() : root.slave-colors(); } }
                     Rectangle { horizontal-stretch: 1; }
-                    Button { text: "Cancel"; clicked => { root.col-open = false; } }
-                    AccentButton { text: "Apply"; width: 90px; clicked => { root.active-mode == 0 ? root.master-colors() : root.slave-colors(); root.col-open = false; } }
+                    ProductButton { text: I18n.t("取消", "Cancel"); clicked => { root.col-open = false; } }
+                    AccentButton { text: I18n.t("应用", "Apply"); width: 90px; clicked => { root.active-mode == 0 ? root.master-colors() : root.slave-colors(); root.col-open = false; } }
                 }
             }
         }
@@ -2405,37 +2308,36 @@ export component AppWindow inherits Window {
     // =====================================================================
     // Value-names dialog
     // =====================================================================
-    if root.vn-open: Rectangle {
+    ProductModal {
+        open: root.vn-open;
+        close-requested => { root.vn-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea { width: 100%; height: 100%; clicked => { } }
-        Rectangle {
-            width: 480px;
-            height: 480px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 480px;
+            dialog-height: 480px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             VerticalLayout {
                 padding: 20px;
                 spacing: 10px;
-                Text { text: "Value names"; font-size: 17px; font-weight: 800; }
-                Field { label: "Enabled:"; CheckBox { text: "show labels instead of numeric values"; checked <=> root.vn-enabled; } }
-                Text { text: "One \"value=name\" per line (decimal or 0x hex). Unmapped values stay numeric."; wrap: word-wrap; font-size: 12px; opacity: 0.65; }
+                Text { text: I18n.t("数值标签", "Value names"); font-size: 17px; font-weight: 800; }
+                Field { label: I18n.t("启用：", "Enabled:"); CheckBox { text: I18n.t("使用标签代替数值显示", "show labels instead of numeric values"); checked <=> root.vn-enabled; } }
+                Text { text: I18n.t("每行输入“数值=名称”，支持十进制或 0x 十六进制；未映射的值仍显示数值。", "One \"value=name\" per line (decimal or 0x hex). Unmapped values stay numeric."); wrap: word-wrap; font-size: ProductDesign.font-sm; opacity: 0.65; }
                 TextEdit {
                     vertical-stretch: 1;
                     text <=> root.vn-text;
                 }
                 HorizontalLayout {
                     spacing: 10px;
-                    Button { text: "Import…"; clicked => { root.vn-import(); } }
-                    Button { text: "Export…"; clicked => { root.vn-export(); } }
+                    ProductButton { text: I18n.t("导入…", "Import…"); clicked => { root.vn-import(); } }
+                    ProductButton { text: I18n.t("导出…", "Export…"); clicked => { root.vn-export(); } }
                     Rectangle { horizontal-stretch: 1; }
-                    Button { text: "Cancel"; clicked => { root.vn-open = false; } }
-                    AccentButton { text: "Apply"; width: 90px; clicked => { root.active-mode == 0 ? root.master-value-names() : root.slave-value-names(); root.vn-open = false; } }
+                    ProductButton { text: I18n.t("取消", "Cancel"); clicked => { root.vn-open = false; } }
+                    AccentButton { text: I18n.t("应用", "Apply"); width: 90px; clicked => { root.active-mode == 0 ? root.master-value-names() : root.slave-value-names(); root.vn-open = false; } }
                 }
             }
         }
@@ -2444,43 +2346,42 @@ export component AppWindow inherits Window {
     // =====================================================================
     // Logging dialog
     // =====================================================================
-    if root.log-open: Rectangle {
+    ProductModal {
+        open: root.log-open;
+        close-requested => { root.log-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea { width: 100%; height: 100%; clicked => { } }
-        Rectangle {
-            width: 480px;
-            height: 400px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 480px;
+            dialog-height: 400px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             VerticalLayout {
                 padding: 20px;
                 spacing: 10px;
-                Text { text: "Data logging (active window)"; font-size: 17px; font-weight: 800; }
-                Field { label: "Status:"; Text {
-                    text: root.log-active ? "Logging…" : "Stopped";
+                Text { text: I18n.t("数据记录（当前窗口）", "Data logging (active window)"); font-size: 17px; font-weight: 800; }
+                Field { label: I18n.t("状态：", "Status:"); Text {
+                    text: root.log-active ? I18n.t("记录中…", "Logging…") : I18n.t("已停止", "Stopped");
                     vertical-alignment: center;
-                    color: root.log-active ? Theme.ok : Palette.foreground;
+                    color: root.log-active ? Theme.ok : ProductDesign.text;
                     font-weight: 700;
                 } }
-                Field { label: "Rate:"; ComboBox { model: ["Each read", "Every N seconds"]; current-index <=> root.log-rate-mode; } }
-                if root.log-rate-mode == 1: Field { label: "Period s:"; SpinBox { value <=> root.log-period; minimum: 1; maximum: 86400; } }
-                Field { label: "Delimiter:"; ComboBox { model: ["Comma (CSV)", "Tab"]; current-index <=> root.log-delim; } }
-                Field { label: "On change:"; CheckBox { text: "log only when a value changes"; checked <=> root.log-onchange; } }
-                Field { label: "Timestamp:"; CheckBox { text: "prefix each row with date/time"; checked <=> root.log-timestamp; } }
-                Text { text: "Start choose a file; rows are appended live as the active window polls."; wrap: word-wrap; font-size: 12px; opacity: 0.65; }
+                Field { label: I18n.t("记录频率：", "Rate:"); ComboBox { model: [I18n.t("每次读取", "Each read"), I18n.t("每隔 N 秒", "Every N seconds")]; current-index <=> root.log-rate-mode; } }
+                if root.log-rate-mode == 1: Field { label: I18n.t("周期(秒)：", "Period s:"); SpinBox { value <=> root.log-period; minimum: 1; maximum: 86400; } }
+                Field { label: I18n.t("分隔符：", "Delimiter:"); ComboBox { model: [I18n.t("逗号 (CSV)", "Comma (CSV)"), I18n.t("制表符", "Tab")]; current-index <=> root.log-delim; } }
+                Field { label: I18n.t("变化记录：", "On change:"); CheckBox { text: I18n.t("仅当数值变化时记录", "log only when a value changes"); checked <=> root.log-onchange; } }
+                Field { label: I18n.t("时间戳：", "Timestamp:"); CheckBox { text: I18n.t("每行添加日期和时间", "prefix each row with date/time"); checked <=> root.log-timestamp; } }
+                Text { text: I18n.t("点击开始后选择文件；当前窗口轮询时实时追加记录。", "Start choose a file; rows are appended live as the active window polls."); wrap: word-wrap; font-size: ProductDesign.font-sm; opacity: 0.65; }
                 Rectangle { vertical-stretch: 1; }
                 HorizontalLayout {
                     spacing: 10px;
-                    AccentButton { text: "Start logging…"; width: 130px; enabled: !root.log-active; clicked => { root.master-start-log(); } }
-                    Button { text: "Stop"; enabled: root.log-active; clicked => { root.master-stop-log(); } }
+                    AccentButton { text: I18n.t("开始记录…", "Start logging…"); width: 130px; enabled: !root.log-active; clicked => { root.master-start-log(); } }
+                    ProductButton { text: I18n.t("停止", "Stop"); enabled: root.log-active; clicked => { root.master-stop-log(); } }
                     Rectangle { horizontal-stretch: 1; }
-                    Button { text: "Close"; clicked => { root.log-open = false; } }
+                    ProductButton { text: I18n.t("关闭", "Close"); clicked => { root.log-open = false; } }
                 }
             }
         }
@@ -2489,45 +2390,44 @@ export component AppWindow inherits Window {
     // =====================================================================
     // Simulation dialog (slave)
     // =====================================================================
-    if root.sim-open: Rectangle {
+    ProductModal {
+        open: root.sim-open;
+        close-requested => { root.sim-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea { width: 100%; height: 100%; clicked => { } }
-        Rectangle {
-            width: 460px;
-            height: 480px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 460px;
+            dialog-height: 480px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             VerticalLayout {
                 padding: 20px;
                 spacing: 10px;
-                Text { text: "Register simulation"; font-size: 17px; font-weight: 800; }
-                Field { label: "Status:"; Text {
-                    text: root.sim-active ? "Running" : "Stopped";
+                Text { text: I18n.t("寄存器仿真", "Register simulation"); font-size: 17px; font-weight: 800; }
+                Field { label: I18n.t("状态：", "Status:"); Text {
+                    text: root.sim-active ? I18n.t("运行中", "Running") : I18n.t("已停止", "Stopped");
                     vertical-alignment: center;
-                    color: root.sim-active ? Theme.ok : Palette.foreground;
+                    color: root.sim-active ? Theme.ok : ProductDesign.text;
                     font-weight: 700;
                 } }
-                Field { label: "Mode:"; ComboBox { model: ["Off", "Increment", "Decrement", "Random", "Toggle"]; current-index <=> root.sim-mode; } }
-                Field { label: "Step:"; SpinBox { value <=> root.sim-step; minimum: 1; maximum: 65535; } }
-                Field { label: "Min:"; SpinBox { value <=> root.sim-min; minimum: -32768; maximum: 65535; } }
-                Field { label: "Max:"; SpinBox { value <=> root.sim-max; minimum: -32768; maximum: 65535; } }
-                Field { label: "Interval ms:"; SpinBox { value <=> root.sim-interval; minimum: 50; maximum: 60000; step-size: 50; } }
-                Field { label: "Scope:"; CheckBox { text: "Only one register"; checked <=> root.sim-one; } }
-                Field { label: "Target addr:"; SpinBox { value <=> root.sim-target; minimum: 0; maximum: 65535; enabled: root.sim-one; } }
-                Text { text: "Animates the current table/address/quantity shown in the grid (or just one register if scoped). Masters read the changing values live."; wrap: word-wrap; font-size: 12px; opacity: 0.65; }
+                Field { label: I18n.t("模式：", "Mode:"); ComboBox { model: [I18n.t("关闭", "Off"), I18n.t("递增", "Increment"), I18n.t("递减", "Decrement"), I18n.t("随机", "Random"), I18n.t("翻转", "Toggle")]; current-index <=> root.sim-mode; } }
+                Field { label: I18n.t("步长：", "Step:"); SpinBox { value <=> root.sim-step; minimum: 1; maximum: 65535; } }
+                Field { label: I18n.t("最小值：", "Min:"); SpinBox { value <=> root.sim-min; minimum: -32768; maximum: 65535; } }
+                Field { label: I18n.t("最大值：", "Max:"); SpinBox { value <=> root.sim-max; minimum: -32768; maximum: 65535; } }
+                Field { label: I18n.t("间隔(ms)：", "Interval ms:"); SpinBox { value <=> root.sim-interval; minimum: 50; maximum: 60000; step-size: 50; } }
+                Field { label: I18n.t("范围：", "Scope:"); CheckBox { text: I18n.t("仅一个寄存器", "Only one register"); checked <=> root.sim-one; } }
+                Field { label: I18n.t("目标地址：", "Target addr:"); SpinBox { value <=> root.sim-target; minimum: 0; maximum: 65535; enabled: root.sim-one; } }
+                Text { text: I18n.t("按当前表格的地址和数量动态更新寄存器；可限定为单个寄存器。主站可以实时读取变化后的值。", "Animates the current table/address/quantity shown in the grid (or just one register if scoped). Masters read the changing values live."); wrap: word-wrap; font-size: ProductDesign.font-sm; opacity: 0.65; }
                 Rectangle { vertical-stretch: 1; }
                 HorizontalLayout {
                     spacing: 10px;
-                    AccentButton { text: "Start"; width: 90px; enabled: !root.sim-active; clicked => { root.slave-sim-start(); } }
-                    Button { text: "Stop"; enabled: root.sim-active; clicked => { root.slave-sim-stop(); } }
+                    AccentButton { text: I18n.t("启动", "Start"); width: 90px; enabled: !root.sim-active; clicked => { root.slave-sim-start(); } }
+                    ProductButton { text: I18n.t("停止", "Stop"); enabled: root.sim-active; clicked => { root.slave-sim-stop(); } }
                     Rectangle { horizontal-stretch: 1; }
-                    Button { text: "Close"; clicked => { root.sim-open = false; } }
+                    ProductButton { text: I18n.t("关闭", "Close"); clicked => { root.sim-open = false; } }
                 }
             }
         }
@@ -2536,24 +2436,23 @@ export component AppWindow inherits Window {
     // =====================================================================
     // Connection info popup (status bar click)
     // =====================================================================
-    if root.conn-info-open: Rectangle {
+    ProductModal {
+        open: root.conn-info-open;
+        close-requested => { root.conn-info-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea { width: 100%; height: 100%; clicked => { root.conn-info-open = false; } }
-        Rectangle {
-            width: 420px;
-            height: 260px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 420px;
+            dialog-height: 260px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             VerticalLayout {
                 padding: 20px;
                 spacing: 10px;
-                Text { text: "Connection details"; font-size: 17px; font-weight: 800; }
+                Text { text: I18n.t("连接详情", "Connection details"); font-size: 17px; font-weight: 800; }
                 TextEdit {
                     vertical-stretch: 1;
                     text <=> root.conn-info-text;
@@ -2563,7 +2462,7 @@ export component AppWindow inherits Window {
                 HorizontalLayout {
                     spacing: 10px;
                     Rectangle { horizontal-stretch: 1; }
-                    AccentButton { text: "Close"; width: 90px; clicked => { root.conn-info-open = false; } }
+                    AccentButton { text: I18n.t("关闭", "Close"); width: 90px; clicked => { root.conn-info-open = false; } }
                 }
             }
         }
@@ -2572,10 +2471,11 @@ export component AppWindow inherits Window {
     // =====================================================================
     // Offline authorization dialog
     // =====================================================================
-    if root.license-open: Rectangle {
+    ProductModal {
+        open: root.license-open;
+        close-requested => { root.license-open = false; }
         width: 100%;
         height: 100%;
-        background: Theme.scrim;
         TouchArea {
             width: 100%;
             height: 100%;
@@ -2589,15 +2489,13 @@ export component AppWindow inherits Window {
             border-radius: 12px;
             background: Theme.shadow;
         }
-        Rectangle {
-            width: 540px;
-            height: 430px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: Palette.background;
+        ProductDialogSurface {
+            available-width: parent.width; available-height: parent.height;
+            dialog-width: 540px;
+            dialog-height: 430px;
+            background: ProductDesign.surface;
             border-width: 1px;
-            border-color: Palette.border;
+            border-color: ProductDesign.border;
             TouchArea { }
             VerticalLayout {
                 spacing: 0px;
@@ -2625,7 +2523,7 @@ export component AppWindow inherits Window {
                         height: 30px;
                         text: I18n.t("Modbus 使用授权", "Modbus License");
                         color: Theme.accent-fg;
-                        font-size: 20px;
+                        font-size: ProductDesign.font-xl;
                         font-weight: 800;
                         vertical-alignment: center;
                     }
@@ -2638,7 +2536,7 @@ export component AppWindow inherits Window {
                             ? I18n.t("本次运行已解除时间限制", "Time limit removed for this session")
                             : I18n.t("剩余使用时间", "Time remaining");
                         color: Theme.accent-fg-muted;
-                        font-size: 12px;
+                        font-size: ProductDesign.font-sm;
                         vertical-alignment: center;
                     }
                     Rectangle {
@@ -2674,7 +2572,7 @@ export component AppWindow inherits Window {
                             "The unlicensed edition runs for one year. Send the machine code to the licensor, then import the signed Ed25519 .pcanlic file."
                         );
                         color: Theme.text-muted;
-                        font-size: 12px;
+                        font-size: ProductDesign.font-sm;
                         wrap: word-wrap;
                         vertical-alignment: center;
                     }
@@ -2682,7 +2580,7 @@ export component AppWindow inherits Window {
                     Text {
                         height: 20px;
                         text: I18n.t("机器码", "Machine code");
-                        font-size: 12px;
+                        font-size: ProductDesign.font-sm;
                         font-weight: 700;
                         vertical-alignment: center;
                     }
@@ -2694,7 +2592,7 @@ export component AppWindow inherits Window {
                             read-only: true;
                             font-family: ProductDesign.font-mono;
                         }
-                        Button {
+                        ProductButton {
                             width: 112px;
                             text: I18n.t("复制机器码", "Copy code");
                             clicked => { root.license-copy-machine-code(); }
@@ -2704,7 +2602,7 @@ export component AppWindow inherits Window {
                     Text {
                         height: 20px;
                         text: I18n.t("离线授权文件", "Offline license file");
-                        font-size: 12px;
+                        font-size: ProductDesign.font-sm;
                         font-weight: 700;
                         vertical-alignment: center;
                     }
@@ -2723,7 +2621,7 @@ export component AppWindow inherits Window {
                             Text {
                                 text: root.license-info != "" ? root.license-info : I18n.t("请选择 .pcanlic 文件", "Select a .pcanlic file");
                                 color: root.license-info != "" ? ProductDesign.text : Theme.text-muted;
-                                font-size: 12px;
+                                font-size: ProductDesign.font-sm;
                                 vertical-alignment: center;
                                 overflow: elide;
                             }
@@ -2731,7 +2629,7 @@ export component AppWindow inherits Window {
                                 visible: root.license-unlocked;
                                 text: I18n.en ? root.license-validity-en : root.license-validity-zh;
                                 color: Theme.ok;
-                                font-size: 11px;
+                                font-size: ProductDesign.font-xs;
                                 vertical-alignment: center;
                                 overflow: elide;
                             }
@@ -2742,7 +2640,7 @@ export component AppWindow inherits Window {
                         height: 22px;
                         text: root.license-error;
                         color: root.license-unlocked ? Theme.ok : Theme.err;
-                        font-size: 12px;
+                        font-size: ProductDesign.font-sm;
                         vertical-alignment: center;
                         overflow: elide;
                     }
@@ -2752,7 +2650,7 @@ export component AppWindow inherits Window {
                     HorizontalLayout {
                         height: ProductDesign.control-height;
                         spacing: 10px;
-                        Button {
+                        ProductButton {
                             text: I18n.t("关闭", "Close");
                             clicked => { root.license-open = false; }
                         }
@@ -2815,7 +2713,7 @@ export component PollFloat inherits Window {
                 Rectangle {
                     width: 52px; height: 20px; border-radius: 4px; background: Theme.accent-fg;
                     y: (parent.height - self.height) / 2;
-                    Text { text: "CLIENT"; color: Theme.accent; font-size: 10px; font-weight: 800; width: 100%; height: 100%; horizontal-alignment: center; vertical-alignment: center; }
+                    Text { text: I18n.t("客户端", "CLIENT"); color: Theme.accent; font-size: 10px; font-weight: 800; width: 100%; height: 100%; horizontal-alignment: center; vertical-alignment: center; }
                 }
                 Text { text: root.ptitle; color: Theme.accent-fg; font-size: 15px; font-weight: 800; vertical-alignment: center; }
                 Rectangle { horizontal-stretch: 1; }
@@ -2843,8 +2741,8 @@ export component PollFloat inherits Window {
                         background: root.is-write ? Theme.warn : Theme.accent;
                         y: (parent.height - self.height) / 2;
                         Text {
-                            text: root.is-write ? "WRITE" : "READ";
-                            color: Theme.accent-fg; font-size: 11px; font-weight: 800;
+                            text: root.is-write ? I18n.t("写入", "WRITE") : I18n.t("读取", "READ");
+                            color: Theme.accent-fg; font-size: ProductDesign.font-xs; font-weight: 800;
                             horizontal-alignment: center; vertical-alignment: center;
                         }
                     }
@@ -2861,9 +2759,9 @@ export component PollFloat inherits Window {
             Rectangle {
                 height: 30px;
                 border-radius: 8px;
-                background: Palette.control-background;
+                background: ProductDesign.surface;
                 border-width: 1px;
-                border-color: Palette.border;
+                border-color: ProductDesign.border;
                 Text { x: 12px; width: parent.width - 24px; height: 100%; text: root.status; vertical-alignment: center; overflow: elide; }
             }
         }
@@ -2906,7 +2804,7 @@ export component SlaveMonitor inherits Window {
                 Rectangle {
                     width: 56px; height: 20px; border-radius: 4px; background: Theme.accent-fg;
                     y: (parent.height - self.height) / 2;
-                    Text { text: "SERVER"; color: Theme.ok; font-size: 10px; font-weight: 800; width: 100%; height: 100%; horizontal-alignment: center; vertical-alignment: center; }
+                    Text { text: I18n.t("服务端", "SERVER"); color: Theme.ok; font-size: 10px; font-weight: 800; width: 100%; height: 100%; horizontal-alignment: center; vertical-alignment: center; }
                 }
                 Text { text: root.mtitle; color: Theme.accent-fg; font-size: 15px; font-weight: 800; vertical-alignment: center; }
                 Rectangle { horizontal-stretch: 1; }
@@ -2941,10 +2839,10 @@ export component SlaveMonitor inherits Window {
             Rectangle {
                 height: 30px;
                 border-radius: 8px;
-                background: Palette.alternate-background;
+                background: ProductDesign.zebra;
                 border-width: 1px;
-                border-color: Palette.border;
-                Text { x: 12px; width: parent.width - 24px; height: 100%; text: root.status; vertical-alignment: center; overflow: elide; font-size: 12px; }
+                border-color: ProductDesign.border;
+                Text { x: 12px; width: parent.width - 24px; height: 100%; text: root.status; vertical-alignment: center; overflow: elide; font-size: ProductDesign.font-sm; }
             }
         }
     }

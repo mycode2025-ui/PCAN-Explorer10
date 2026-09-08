@@ -94,7 +94,8 @@ pub fn parse_csv_frames(text: &str) -> Vec<CanFrame> {
 }
 
 /// Vector ASC. 经典: `<t> <ch> <id>[x] Rx|Tx d <dlc> <bytes...>`(远程帧用 r);
-/// CAN FD: `<t> CANFD <ch> Rx|Tx <id>[x] <name> <brs> <esi> <dlc> <datalen> <bytes...>`。
+/// CAN FD supports both Vector's `<ch> Rx|Tx <id> <name> ...` layout and the
+/// common logger layout `<ch> <id> Rx|Tx <brs> <esi> d ...`.
 pub fn parse_asc_frames(text: &str) -> Vec<CanFrame> {
     let mut v = Vec::new();
     let mut date_epoch: Option<f64> = None;
@@ -132,21 +133,52 @@ pub fn parse_asc_frames(text: &str) -> Vec<CanFrame> {
                 continue;
             };
             let tx = toks[dir_idx] == "Tx";
-            let Some(idtok) = toks.get(dir_idx + 1) else {
+            // Vector writes direction before ID, while CANoe-compatible logger
+            // exports commonly put ID immediately before direction.
+            let id_idx = if dir_idx > 3
+                && u32::from_str_radix(toks[dir_idx - 1].trim_end_matches(['x', 'X']), 16).is_ok()
+            {
+                dir_idx - 1
+            } else {
+                dir_idx + 1
+            };
+            let Some(idtok) = toks.get(id_idx) else {
                 continue;
             };
             let ext = idtok.ends_with('x') || idtok.ends_with('X');
             let Ok(id) = u32::from_str_radix(idtok.trim_end_matches(['x', 'X']), 16) else {
                 continue;
             };
-            // dir+1=id, +2=name, +3=brs, +4=esi, +5=dlc, +6=datalen, +7..=data
-            let brs = toks.get(dir_idx + 3).map(|s| *s == "1").unwrap_or(false);
+            let id_before_direction = id_idx < dir_idx;
+            let brs_idx = if id_before_direction {
+                dir_idx + 1
+            } else {
+                dir_idx + 3
+            };
+            let brs = toks.get(brs_idx).map(|s| *s == "1").unwrap_or(false);
+            let data_marker = id_before_direction
+                .then(|| {
+                    toks.iter()
+                        .enumerate()
+                        .skip(dir_idx + 1)
+                        .take(5)
+                        .find(|(_, token)| token.eq_ignore_ascii_case("d"))
+                        .map(|(index, _)| index)
+                })
+                .flatten();
+            let (datalen_idx, data_idx) = if let Some(marker) = data_marker {
+                (marker + 2, marker + 3)
+            } else if id_before_direction {
+                (dir_idx + 5, dir_idx + 6)
+            } else {
+                (dir_idx + 6, dir_idx + 7)
+            };
             let datalen = toks
-                .get(dir_idx + 6)
+                .get(datalen_idx)
                 .and_then(|s| s.parse::<usize>().ok())
                 .unwrap_or(0);
             let data: Vec<u8> = toks
-                .get(dir_idx + 7..)
+                .get(data_idx..)
                 .map(|b| {
                     b.iter()
                         .take(datalen)
@@ -451,6 +483,27 @@ base hex timestamps absolute\n\
         assert!(frames[0].t > 1_700_000_000.0);
         assert_eq!(frames[0].id, 0x18FA78F5);
         assert!(frames[0].ext);
+    }
+
+    #[test]
+    fn asc_fd_logger_layout_preserves_id_length_and_payload() {
+        let asc = "date Mon Sep 07 12:00:02 AM 2026\n\
+base hex timestamps absolute\n\
+15.152 CANFD 1 18FFC13Cx Tx 0 0 d 8 8 CA 1F 1C 0A 00 55 46 45\n\
+17.151 CANFD 1 180110E4x Tx 1 0 d 15 64 03 0A F0 0A F0 20 14 7F FF 6A 75 B5 75 B5 1F 7E 1F 5F 1F 5F 08 AF 08 AF 25 46 3D A0 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 50 00 22 63 1D 93 03 5C 00 00 00 00 01 34 00 05 00 00 00 05\n";
+        let frames = parse_asc_frames(asc);
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].id, 0x18FFC13C);
+        assert!(frames[0].ext && frames[0].fd && frames[0].tx);
+        assert_eq!(
+            frames[0].data,
+            vec![0xCA, 0x1F, 0x1C, 0x0A, 0, 0x55, 0x46, 0x45]
+        );
+        assert_eq!(frames[1].id, 0x180110E4);
+        assert!(frames[1].brs);
+        assert_eq!(frames[1].data.len(), 64);
+        assert_eq!(&frames[1].data[..4], &[0x03, 0x0A, 0xF0, 0x0A]);
+        assert_eq!(&frames[1].data[60..], &[0x00, 0x00, 0x00, 0x05]);
     }
 
     #[test]

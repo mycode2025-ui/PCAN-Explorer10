@@ -13,10 +13,13 @@ mod dbc {
 mod expr {
     pub use pcanwork_core::expr::*;
 }
+mod batch_ack;
 mod feature_hex;
 mod ipc;
 mod license;
 mod msg_table;
+#[cfg(debug_assertions)]
+mod software_stress;
 mod ota {
     pub use pcanwork_core::ota::*;
 }
@@ -47,7 +50,10 @@ include!("wire_ota.rs");
 include!("wire_playback.rs");
 include!("wire_sim.rs");
 include!("wire_pyauto.rs");
-use chart::{chart_full_range, refresh_chart};
+use chart::{chart_full_range, pan_chart_range, refresh_chart, selected_chart_range};
+use feature_hex::{
+    build_feature_hex_rows, collect_feature_hex_rows, edit_feature_hex_byte, fill_feature_hex_rows,
+};
 use msg_table::build_msg_table;
 use recording::Format as RecFmt;
 use render::{build_signal_panel, build_stats, refresh_signal_picker};
@@ -60,13 +66,9 @@ use sim::{
 #[cfg(test)]
 use sim::{sim_decode_value, sim_encode_value, sim_gen_value};
 use tx::{
-    build_tx_data_editor_rows, build_tx_dbc_page, collect_tx_data_editor,
-    edit_tx_data_editor_byte, paste_tx_data_editor, populate_sig_panel, push_tx_list,
-    selected_signal, set_signal_value, tx_list_sig, tx_task_from_form, ui_to_vary, update_tx_task,
-};
-use feature_hex::{
-    build_feature_hex_rows, collect_feature_hex_rows, edit_feature_hex_byte,
-    fill_feature_hex_rows,
+    build_tx_data_editor_rows, build_tx_dbc_page, collect_tx_data_editor, edit_tx_data_editor_byte,
+    parse_tx_repeat, paste_tx_data_editor, populate_sig_panel, push_tx_list, selected_signal,
+    set_signal_value, tx_list_sig, tx_task_from_form, ui_to_vary, update_tx_task,
 };
 
 use can::{
@@ -93,10 +95,12 @@ use pcanwork_ui_features::{
 
 const TRACE_CAP: usize = 100_000;
 pub(crate) const DISPLAY_CAP: usize = 1500;
-const CHART_CAP: usize = 10_000;
+const CHART_CAP: usize = 100_000;
 const LOG_CAP: usize = 500;
 const MAX_CAN_EVENTS_PER_TICK: usize = 2000;
-const MAX_CAN_EVENT_TIME_PER_TICK: Duration = Duration::from_millis(8);
+const CAN_RECEIVE_INTERVAL: Duration = Duration::from_millis(10);
+const UI_REFRESH_INTERVAL: Duration = Duration::from_millis(100);
+const MAX_CAN_EVENT_TIME_PER_TICK: Duration = Duration::from_millis(4);
 type ProjectLoadResult = Result<(Project, Vec<(String, DbcDb)>, Vec<String>, bool), String>;
 
 enum WorkerEvent {
@@ -166,19 +170,61 @@ pub(crate) fn show_child_window<C: slint::ComponentHandle + 'static>(component: 
     });
 }
 
+fn centered_window_position(
+    work_area: (i32, i32, i32, i32),
+    window_size: (i32, i32),
+) -> (i32, i32) {
+    let (left, top, right, bottom) = work_area;
+    let (window_width, window_height) = window_size;
+    let work_width = right - left;
+    let work_height = bottom - top;
+    (
+        left + ((work_width - window_width) / 2).max(0),
+        top + ((work_height - window_height) / 2).max(0),
+    )
+}
+
 #[cfg(windows)]
 fn activate_child_window(window: &slint::Window) {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use std::ffi::c_void;
     type Hwnd = isize;
+    #[repr(C)]
+    struct WinRect {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    }
     #[link(name = "user32")]
     unsafe extern "system" {
         fn BringWindowToTop(h: Hwnd) -> i32;
+        fn GetWindowRect(h: Hwnd, rect: *mut WinRect) -> i32;
         fn IsIconic(h: Hwnd) -> i32;
+        fn SetWindowPos(
+            h: Hwnd,
+            insert_after: Hwnd,
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+            flags: u32,
+        ) -> i32;
         fn SetActiveWindow(h: Hwnd) -> Hwnd;
         fn SetForegroundWindow(h: Hwnd) -> i32;
         fn ShowWindow(h: Hwnd, command: i32) -> i32;
+        fn SystemParametersInfoW(
+            action: u32,
+            parameter: u32,
+            value: *mut c_void,
+            update: u32,
+        ) -> i32;
     }
     const SW_RESTORE: i32 = 9;
+    const SPI_GETWORKAREA: u32 = 0x0030;
+    const SWP_NOSIZE: u32 = 0x0001;
+    const SWP_NOZORDER: u32 = 0x0004;
+    const SWP_NOACTIVATE: u32 = 0x0010;
     let slint_handle = window.window_handle();
     let Ok(handle) = slint_handle.window_handle() else {
         return;
@@ -188,6 +234,47 @@ fn activate_child_window(window: &slint::Window) {
         unsafe {
             if IsIconic(hwnd) != 0 {
                 ShowWindow(hwnd, SW_RESTORE);
+            }
+            let mut window_rect = WinRect {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
+            let mut work_area = WinRect {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
+            if GetWindowRect(hwnd, &mut window_rect) != 0
+                && SystemParametersInfoW(
+                    SPI_GETWORKAREA,
+                    0,
+                    (&mut work_area as *mut WinRect).cast::<c_void>(),
+                    0,
+                ) != 0
+            {
+                let window_width = window_rect.right - window_rect.left;
+                let window_height = window_rect.bottom - window_rect.top;
+                let (x, y) = centered_window_position(
+                    (
+                        work_area.left,
+                        work_area.top,
+                        work_area.right,
+                        work_area.bottom,
+                    ),
+                    (window_width, window_height),
+                );
+                SetWindowPos(
+                    hwnd,
+                    0,
+                    x,
+                    y,
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+                );
             }
             BringWindowToTop(hwnd);
             SetActiveWindow(hwnd);
@@ -199,6 +286,7 @@ fn activate_child_window(window: &slint::Window) {
 #[cfg(not(windows))]
 fn activate_child_window(_window: &slint::Window) {}
 
+#[derive(Clone)]
 pub(crate) struct FrameRec {
     pub(crate) no: u64,
     pub(crate) key: u64,
@@ -752,7 +840,7 @@ struct ChannelEditSession {
     dirty: bool,
 }
 
-#[derive(Default)]
+#[derive(Default, PartialEq)]
 pub(crate) struct Filter {
     pub(crate) allow: Vec<(u32, u32)>,
     pub(crate) deny: Vec<u32>,
@@ -802,6 +890,7 @@ impl Filter {
 }
 
 pub(crate) struct App {
+    pending_batches: Vec<batch_ack::Pending>,
     pub(crate) cmd: CommandSender,
     worker_tx: WorkerSender<WorkerEvent>,
     pub(crate) license_gate: Rc<license::RuntimeGate>,
@@ -945,8 +1034,13 @@ pub(crate) struct App {
     pub(crate) chart_cursor: bool,
     pub(crate) chart_dual: bool,
     pub(crate) chart_time_mode: i32,
+    pub(crate) chart_y_mode: i32,
+    pub(crate) chart_grid: bool,
+    pub(crate) chart_points: bool,
     pub(crate) chart_time_source: i32,
+    pub(crate) chart_playback_last_t: Option<f64>,
     pub(crate) chart_view: Option<(f64, f64)>,
+    pub(crate) chart_zoom_target: Option<(f64, f64)>,
     pub(crate) chart_pause_view: Option<(f64, f64)>,
     pub(crate) chart_frozen_series: Option<Vec<Series>>,
     chart_highlight: Option<(String, std::time::Instant)>,
@@ -976,6 +1070,7 @@ pub(crate) struct App {
     pb_total: usize,
     pb_playing: bool,
     pub(crate) last_msg_sig: u64,
+    pub(crate) table_cache: msg_table::TableCache,
 
     pub(crate) fps: f64,
     pub(crate) bus_load: f64,
@@ -1015,6 +1110,22 @@ fn baud_bps(s: &str) -> f64 {
         v.trim().parse::<f64>().unwrap_or(500.0) * 1e3
     } else {
         t.parse::<f64>().unwrap_or(500_000.0)
+    }
+}
+
+fn playback_time_restarted(last_time: Option<f64>, next_time: f64) -> bool {
+    last_time.is_some_and(|last| next_time + 1e-9 < last)
+}
+
+fn chart_sample_cap(configured_cap: usize, playback_frame: bool, playback_total: usize) -> usize {
+    if playback_frame {
+        // A record-file playback is a finite, user-selected data set. Retain its
+        // complete signal history so a long playback does not silently turn into
+        // only the last `configured_cap` samples. Rendering still decimates the
+        // visible points, so this does not increase the Slint path complexity.
+        configured_cap.max(playback_total)
+    } else {
+        configured_cap
     }
 }
 
@@ -1125,11 +1236,53 @@ impl App {
     }
 
     fn ingest(&mut self, f: CanFrame, playback_frame: bool) {
+        self.ingest_impl(f, playback_frame, true);
+    }
+
+    fn ingest_batch(&mut self, frames: Vec<CanFrame>, playback_frame: bool) {
+        // Trigger actions may start or stop recording at an exact frame boundary.
+        if self.trigger.is_some() {
+            for frame in frames {
+                self.ingest(frame, playback_frame);
+            }
+            return;
+        }
+        if self.recording
+            && let Err(error) = self.recorder.push_batch(frames.clone())
+        {
+            self.recording = false;
+            let _ = self.recorder.stop();
+            self.log(format!("记录已停止: {error}"));
+        }
+        for frame in frames {
+            self.ingest_impl(frame, playback_frame, false);
+        }
+    }
+
+    fn ingest_impl(&mut self, f: CanFrame, playback_frame: bool, record_frame: bool) {
         let new_time_source = if playback_frame { 1 } else { 0 };
-        if self.chart_time_source != new_time_source {
+        let source_changed = self.chart_time_source != new_time_source;
+        let playback_restarted =
+            playback_frame && playback_time_restarted(self.chart_playback_last_t, f.t);
+        if source_changed || playback_restarted {
+            // Live capture and each playback pass have independent time bases. Keeping
+            // samples across a time rollback makes the Path connect the old tail to the
+            // new head with a false diagonal. Start a fresh trace instead.
+            for series in &mut self.series {
+                series.samples.clear();
+            }
+            if !self.chart_paused {
+                self.chart_view = None;
+                self.chart_zoom_target = None;
+                self.chart_pause_view = None;
+                self.chart_frozen_series = None;
+            }
+        }
+        if source_changed {
             self.chart_time_mode = if playback_frame { 0 } else { 1 };
         }
         self.chart_time_source = new_time_source;
+        self.chart_playback_last_t = playback_frame.then_some(f.t);
 
         if !playback_frame && self.capture_wall_epoch.is_none() {
             let now = std::time::SystemTime::now()
@@ -1282,6 +1435,7 @@ impl App {
             .to_string();
 
         if self.recording
+            && record_frame
             && let Err(error) = self.recorder.push(f.clone())
         {
             self.recording = false;
@@ -1290,6 +1444,11 @@ impl App {
         }
 
         let mut log_lines: Vec<String> = Vec::new();
+        let sample_cap = chart_sample_cap(
+            self.chart_cap,
+            playback_frame,
+            self.pb_total.max(self.pb_raw.len()),
+        );
 
         let need_dbc_series = self.series.iter().any(|s| s.expr.is_none() && s.id == f.id);
         let need_expr = !self.expr_vars.is_empty() && self.expr_decode_ids.contains(&f.id);
@@ -1305,7 +1464,7 @@ impl App {
                 if let Some(dec) = decoded.iter().find(|x| x.name == s.signal) {
                     s.cur = dec.physical;
                     s.samples.push_back((f.t, dec.physical));
-                    while s.samples.len() > self.chart_cap {
+                    while s.samples.len() > sample_cap {
                         s.samples.pop_front();
                     }
                     if logging {
@@ -1321,7 +1480,7 @@ impl App {
                 for dec in &decoded {
                     self.sig_latest.insert(dec.name.clone(), dec.physical);
                 }
-                let cap = self.chart_cap;
+                let cap = sample_cap;
                 let t = f.t;
 
                 let evals: Vec<(usize, f64)> = self
@@ -1467,7 +1626,7 @@ pub(crate) fn fmt_wall(unix_secs: f64, with_date: bool) -> String {
         Some(utc) => {
             let dt = utc.with_timezone(&chrono::Local);
             if with_date {
-                dt.format("%m-%d %H:%M:%S%.3f").to_string()
+                dt.format("%Y-%m-%d %H:%M:%S%.3f").to_string()
             } else {
                 dt.format("%H:%M:%S%.3f").to_string()
             }
@@ -1523,7 +1682,10 @@ fn start_update_check(weak: slint::Weak<AppWindow>) {
 }
 
 #[derive(Clone, Default)]
-struct ChildWindowStore(Rc<std::cell::RefCell<Option<Rc<ChildWindows>>>>);
+struct ChildWindowStore {
+    all: Rc<std::cell::RefCell<Option<Rc<ChildWindows>>>>,
+    playback: Rc<std::cell::RefCell<Option<Rc<PlaybackWindow>>>>,
+}
 
 struct ChildWindows {
     chart: ChartWindow,
@@ -1532,7 +1694,7 @@ struct ChildWindows {
     uds: UdsWindow,
     xcp: XcpWindow,
     channel: ChannelConfigWindow,
-    playback: PlaybackWindow,
+    playback: Rc<PlaybackWindow>,
     convert: ConvertWindow,
     cache: CacheConfigWindow,
     trigger: TriggerWindow,
@@ -1634,7 +1796,36 @@ enum ChildWindowKind {
 
 impl ChildWindowStore {
     fn get(&self) -> Option<Rc<ChildWindows>> {
-        self.0.borrow().clone()
+        self.all.borrow().clone()
+    }
+
+    fn get_playback(&self) -> Option<Rc<PlaybackWindow>> {
+        self.get()
+            .map(|windows| windows.playback.clone())
+            .or_else(|| self.playback.borrow().clone())
+    }
+
+    fn ensure_playback(
+        &self,
+        app: Rc<std::cell::RefCell<App>>,
+        ui: &AppWindow,
+    ) -> Result<Rc<PlaybackWindow>, slint::PlatformError> {
+        if let Some(window) = self.get_playback() {
+            return Ok(window);
+        }
+        let window = Rc::new(PlaybackWindow::new()?);
+        window
+            .global::<FeatureTheme>()
+            .set_dark(ui.global::<Theme>().get_dark());
+        window
+            .global::<FeatureTheme>()
+            .set_big(ui.global::<Theme>().get_big());
+        window
+            .global::<FeatureI18n>()
+            .set_en(ui.global::<I18n>().get_en());
+        wire_playback_window(app, &window);
+        *self.playback.borrow_mut() = Some(window.clone());
+        Ok(window)
     }
 
     fn ensure(
@@ -1648,6 +1839,7 @@ impl ChildWindowStore {
             return Ok(windows);
         }
 
+        let existing_playback = self.playback.borrow().clone();
         let windows = Rc::new(ChildWindows {
             chart: ChartWindow::new()?,
             signal: SignalSelectWindow::new()?,
@@ -1655,7 +1847,10 @@ impl ChildWindowStore {
             uds: UdsWindow::new()?,
             xcp: XcpWindow::new()?,
             channel: ChannelConfigWindow::new()?,
-            playback: PlaybackWindow::new()?,
+            playback: match existing_playback {
+                Some(window) => window,
+                None => Rc::new(PlaybackWindow::new()?),
+            },
             convert: ConvertWindow::new()?,
             cache: CacheConfigWindow::new()?,
             trigger: TriggerWindow::new()?,
@@ -1775,7 +1970,8 @@ impl ChildWindowStore {
         );
         wire_pyauto(app, ui, &windows.script_runner, ipc_port, ipc_token);
 
-        *self.0.borrow_mut() = Some(windows.clone());
+        *self.playback.borrow_mut() = Some(windows.playback.clone());
+        *self.all.borrow_mut() = Some(windows.clone());
         Ok(windows)
     }
 
@@ -1787,6 +1983,13 @@ impl ChildWindowStore {
         ipc_port: u16,
         ipc_token: String,
     ) {
+        if matches!(kind, ChildWindowKind::Playback) {
+            match self.ensure_playback(app.clone(), ui) {
+                Ok(window) => show_child_window(&*window),
+                Err(error) => app.borrow_mut().log(format!("创建回放窗口失败: {error}")),
+            }
+            return;
+        }
         let windows = match self.ensure(app.clone(), ui, ipc_port, ipc_token) {
             Ok(windows) => windows,
             Err(error) => {
@@ -1811,9 +2014,7 @@ impl ChildWindowStore {
                 if a.last_hardware_scan.is_none() {
                     scan_attached_hardware(&mut a);
                 }
-                let selected = channel_selected(&a)
-                    .clamp(0, channel_configs(&a).len() as i32 - 1)
-                    .max(0);
+                let selected = normalized_channel_selection(&a);
                 if let Some(session) = a.channel_edit.as_mut() {
                     session.selected = selected;
                 }
@@ -1827,7 +2028,7 @@ impl ChildWindowStore {
                 drop(a);
                 show_child_window(&windows.channel);
             }
-            ChildWindowKind::Playback => show_child_window(&windows.playback),
+            ChildWindowKind::Playback => unreachable!(),
             ChildWindowKind::Convert => show_child_window(&windows.convert),
             ChildWindowKind::Cache => {
                 let a = app.borrow();
@@ -1902,1227 +2103,9 @@ fn wire_lazy_window_openers(
     lazy_opener!(on_open_dbc_diagnostics, ChildWindowKind::DbcDiagnostics);
 }
 
+mod startup;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(windows)]
-    windows_dpi::force_system_dpi_awareness();
-
-    if let Err(error) = license::verify_self_integrity("pcanwork", product_version::current()) {
-        rfd::MessageDialog::new()
-            .set_title("PcanWork")
-            .set_description(format!("程序完整性验证失败，软件无法启动。\n\nApplication integrity verification failed.\n\n{error}"))
-            .set_level(rfd::MessageLevel::Error)
-            .show();
-        return Ok(());
-    }
-
-    select_renderer();
-
-    let ui = AppWindow::new()?;
-    ui.set_app_version(format!("v{}", product_version::current()).into());
-    ui.on_open_website(|| {
-        let _ = open_external_url("https://www.hexbyte.cn");
-    });
-    {
-        let weak = ui.as_weak();
-        ui.on_check_update(move || start_update_check(weak.clone()));
-    }
-    {
-        let weak = ui.as_weak();
-        ui.on_open_update_gitee(move || {
-            if let Some(window) = weak.upgrade() {
-                let url = window.get_update_gitee_url();
-                if !url.is_empty() {
-                    let _ = open_external_url(url.as_str());
-                }
-            }
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        ui.on_open_update_github(move || {
-            if let Some(window) = weak.upgrade() {
-                let url = window.get_update_github_url();
-                if !url.is_empty() {
-                    let _ = open_external_url(url.as_str());
-                }
-            }
-        });
-    }
-    start_update_check(ui.as_weak());
-    ui.set_license_machine_code(license::machine_code().into());
-    let trial_duration = license::runtime_trial_duration();
-    let license_gate = Rc::new(license::RuntimeGate::new("pcanwork", trial_duration));
-    let initially_licensed = license_gate.has_signed_license();
-    ui.set_license_unlocked(initially_licensed);
-    if let Ok(payload) = license::verify_installed("pcanwork", "*") {
-        ui.set_license_info(format!("{} · .pcanlic", payload.license_id).into());
-        ui.set_license_validity_zh(license::license_validity(&payload, false).into());
-        ui.set_license_validity_en(license::license_validity(&payload, true).into());
-    }
-    ui.set_license_remaining(
-        if initially_licensed {
-            "已授权".to_string()
-        } else {
-            license::format_remaining(trial_duration.as_secs())
-        }
-        .into(),
-    );
-    ui.set_license_seconds(trial_duration.as_secs() as i32);
-    {
-        let weak = ui.as_weak();
-        let gate = license_gate.clone();
-        ui.on_license_import(move || {
-            let Some(window) = weak.upgrade() else { return };
-            let Some(path) = rfd::FileDialog::new()
-                .add_filter("PcanWork License", &["pcanlic"])
-                .pick_file()
-            else {
-                return;
-            };
-            match license::install_license(&path, gate.product()) {
-                Ok(payload) => {
-                    window.set_license_unlocked(true);
-                    window.set_license_open(false);
-                    window.set_license_remaining(
-                        if window.global::<I18n>().get_en() {
-                            "Licensed"
-                        } else {
-                            "已授权"
-                        }
-                        .into(),
-                    );
-                    window.set_license_info(format!("{} · .pcanlic", payload.license_id).into());
-                    window
-                        .set_license_validity_zh(license::license_validity(&payload, false).into());
-                    window
-                        .set_license_validity_en(license::license_validity(&payload, true).into());
-                    window.set_license_error(
-                        if window.global::<I18n>().get_en() {
-                            "Signed license installed."
-                        } else {
-                            "签名授权文件已安装。"
-                        }
-                        .into(),
-                    );
-                }
-                Err(error) => window.set_license_error(
-                    if window.global::<I18n>().get_en() {
-                        format!("License rejected: {error}")
-                    } else {
-                        format!("授权文件无效：{error}")
-                    }
-                    .into(),
-                ),
-            }
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        ui.on_license_copy_machine_code(move || {
-            let Some(window) = weak.upgrade() else { return };
-            match arboard::Clipboard::new().and_then(|mut clipboard| {
-                clipboard.set_text(window.get_license_machine_code().to_string())
-            }) {
-                Ok(()) => window.set_license_error(
-                    if window.global::<I18n>().get_en() {
-                        "Machine code copied."
-                    } else {
-                        "机器码已复制。"
-                    }
-                    .into(),
-                ),
-                Err(error) => window.set_license_error(
-                    if window.global::<I18n>().get_en() {
-                        format!("Copy failed: {error}")
-                    } else {
-                        format!("复制失败：{error}")
-                    }
-                    .into(),
-                ),
-            }
-        });
-    }
-    let _license_timer = {
-        let weak = ui.as_weak();
-        let gate = license_gate.clone();
-        let timer = Timer::default();
-        timer.start(TimerMode::Repeated, Duration::from_secs(1), move || {
-            let Some(window) = weak.upgrade() else { return };
-            if gate.has_signed_license() {
-                if !window.get_license_unlocked() {
-                    window.set_license_unlocked(true);
-                    window.set_license_remaining(
-                        if window.global::<I18n>().get_en() {
-                            "Licensed"
-                        } else {
-                            "已授权"
-                        }
-                        .into(),
-                    );
-                }
-                return;
-            }
-            let remaining = gate.remaining_seconds();
-            window.set_license_seconds(remaining.min(i32::MAX as u64) as i32);
-            window.set_license_remaining(license::format_remaining(remaining).into());
-            if remaining == 0 {
-                let _ = window.window().hide();
-                let _ = slint::quit_event_loop();
-            }
-        });
-        timer
-    };
-    let (cmd_tx, evt_rx) = can::spawn();
-    let (worker_tx, worker_rx) = crossbeam_channel::bounded::<WorkerEvent>(256);
-
-    let dbc_snap0 = std::sync::Arc::new(ipc::DbcSnapshot::empty());
-    let ipc_snapshot =
-        std::sync::Arc::new(std::sync::Mutex::new(ipc::Snapshot::new(dbc_snap0.clone())));
-    let (ipc_port, ipc_token, ipc_req_rx, ipc_subs) = ipc::spawn_ipc_server(ipc_snapshot.clone());
-
-    let ipc_info_error = std::env::var("PCANWORK_IPC_INFO_FILE")
-        .ok()
-        .and_then(|info_path| {
-            std::fs::write(&info_path, format!("{ipc_port}\n{ipc_token}\n"))
-                .err()
-                .map(|error| format!("写入 IPC 信息文件失败 {info_path}: {error}"))
-        });
-
-    let app = Rc::new(std::cell::RefCell::new(App {
-        cmd: cmd_tx.clone(),
-        worker_tx,
-        license_gate: license_gate.clone(),
-        project_name: String::new(),
-        project_path: None,
-        recent_project_paths: Vec::new(),
-        recent_project_model: Rc::new(VecModel::default()),
-        sim_dirty: false,
-        sim_revision: 0,
-        dbcs: Vec::new(),
-        mode_trace: true,
-        time_mode: 0,
-        capture_wall_epoch: None,
-        cols_hidden: std::collections::HashSet::new(),
-        sim_widgets: Vec::new(),
-        sim_tx_frames: HashMap::new(),
-        sim_sampler: sim::SimSampler::spawn(),
-        sim_sampler_signature: 0,
-        sim_sampler_generation: 0,
-        sim_sampler_keys: Vec::new(),
-        sim_sampler_reported_skips: (0, 0),
-        sim_model: Rc::new(VecModel::default()),
-        sim_sel: -1,
-        sim_multi: std::collections::HashSet::new(),
-        sim_running: false,
-        sim_canvas_w: 0.0,
-        sim_canvas_h: 0.0,
-        paused: false,
-        autoscroll: true,
-        recording: false,
-        connected: false,
-        connected_channels: std::collections::HashSet::new(),
-        shutdown_requested: false,
-        conn_name: String::new(),
-        running: false,
-        baud: "500K".into(),
-        device_cfg: DeviceConfig {
-            sw_channel: 1,
-            is_fd: false,
-            device_type: "Virtual".into(),
-            hardware_label: String::new(),
-            hardware_id: String::new(),
-            device_index: 0,
-            channel_index: 0,
-            baud: "500K".into(),
-            data_baud: "2M".into(),
-            custom_bitrate: String::new(),
-            termination: false,
-            listen_only: false,
-            fd_non_iso: false,
-            net_server: true,
-            ip: String::new(),
-            port: String::new(),
-        },
-        channels: vec![DeviceConfig {
-            sw_channel: 1,
-            is_fd: false,
-            device_type: "Virtual".into(),
-            hardware_label: String::new(),
-            hardware_id: String::new(),
-            device_index: 0,
-            channel_index: 0,
-            baud: "500K".into(),
-            data_baud: "2M".into(),
-            custom_bitrate: String::new(),
-            termination: false,
-            listen_only: false,
-            fd_non_iso: false,
-            net_server: true,
-            ip: String::new(),
-            port: String::new(),
-        }],
-        pcan_devices: Vec::new(),
-        zcan_devices: Vec::new(),
-        last_hardware_scan: None,
-        hardware_scan_in_progress: false,
-        hardware_scan_status: String::new(),
-        channel_edit: None,
-        channel_connect_pending: false,
-        channel_connect_expected: 0,
-        channel_sel: 0,
-        recorder: recording::Recorder::spawn(),
-        rec_fmt: RecFmt::Csv,
-        rec_path: None,
-        sig_log: None,
-        sig_log_last_flush: None,
-        trigger: None,
-        dbc_paths: Vec::new(),
-        trace: VecDeque::new(),
-        no_counter: 0,
-        last: HashMap::new(),
-        last_dirty: true,
-        rx: 0,
-        tx: 0,
-        err: 0,
-        capture_dropped_frames: 0,
-        capture_dropped_events: 0,
-        capture_hardware_overruns: 0,
-        capture_hardware_errors: 0,
-        capture_queue_depth: 0,
-        capture_queue_capacity: 0,
-        capture_queue_high_watermark: 0,
-        command_rejected: 0,
-        command_queue_depth: 0,
-        command_queue_capacity: 0,
-        command_queue_high_watermark: 0,
-        timestamp_samples: 0,
-        timestamp_latest_jitter_us: 0.0,
-        timestamp_max_jitter_us: 0.0,
-        timestamp_drift_ppm: 0.0,
-        timestamp_monotonic_violations: 0,
-        series: Vec::new(),
-        expr_vars: Vec::new(),
-        sig_latest: HashMap::new(),
-        expr_decode_ids: HashSet::new(),
-        sig_cat: 0,
-        signal_pick_expr_selected: None,
-        console_enabled: false,
-        console_id: None,
-        console_ch: 0,
-        console: ConsoleBuf::default(),
-        selected_key: None,
-        selected_index: -1,
-        sig_panel: Vec::new(),
-        dbc_signal_choices: Vec::new(),
-        filter: Filter::default(),
-        txs: Vec::new(),
-        tx_sel: -1,
-        tx_dbc_order: Vec::new(),
-        tx_sig_cache: u64::MAX,
-        tx_msgs_cache: u64::MAX,
-        tx_list_cache: u64::MAX,
-        tx_checked: HashSet::new(),
-        tx_speed: 1.0,
-        chan_names_cache: u64::MAX,
-        next_handle: 1,
-        logs: VecDeque::new(),
-        sort_col: -1,
-        sort_desc: false,
-        display_items: Vec::new(),
-        expanded_keys: HashSet::new(),
-        expanded_signal_cache: HashMap::new(),
-        msg_model: Rc::new(VecModel::from(Vec::<MsgRow>::new())),
-        chart_model: Rc::new(VecModel::from(Vec::<ChartSeries>::new())),
-        chart_xlabel_model: Rc::new(VecModel::default()),
-        log_model: Rc::new(VecModel::default()),
-        console_model: Rc::new(VecModel::default()),
-        dbc_signal_model: Rc::new(VecModel::default()),
-        chan_stat_model: Rc::new(VecModel::default()),
-        id_stat_model: Rc::new(VecModel::default()),
-        sig_model: Rc::new(VecModel::default()),
-        dbc_signal_cache: u64::MAX,
-        console_cache: u64::MAX,
-        sig_panel_cache: u64::MAX,
-        trace_cap: TRACE_CAP,
-        chart_cap: CHART_CAP,
-        tree_collapsed: HashSet::new(),
-        tree_row_keys: Vec::new(),
-        tree_dbc_index: Vec::new(),
-        signal_pick_items: Vec::new(),
-        signal_pick_cache: u64::MAX,
-        signal_pick_selected: None,
-        signal_pick_msg_expanded: HashSet::new(),
-        signal_pick_root_open: true,
-        signal_pick_messages_open: true,
-        signal_pick_filter: String::new(),
-        chart_paused: false,
-        chart_normalize: false,
-        chart_cursor: false,
-        chart_dual: false,
-        chart_time_mode: 0,
-        chart_time_source: 0,
-        chart_view: None,
-        chart_pause_view: None,
-        chart_frozen_series: None,
-        chart_highlight: None,
-        tree_curve_sig: Vec::new(),
-        last_tree_sig: u64::MAX,
-        lang_en: false,
-        python_interpreter: String::new(),
-        last_script_path: String::new(),
-        py_child: None,
-        py_out_rx: None,
-        py_output_dropped: None,
-        py_output_dropped_seen: 0,
-        py_started: None,
-        py_stop_flag: false,
-        run_status: String::new(),
-        py_output: String::new(),
-        py_dirty: false,
-        py_timeout_secs: 120,
-        ipc_snapshot: ipc_snapshot.clone(),
-        ipc_subs: ipc_subs.clone(),
-        ipc_handle_map: HashMap::new(),
-        dbc_snap: dbc_snap0.clone(),
-        pb_raw: Vec::new(),
-        pb_files: Vec::new(),
-        last_msg_sig: u64::MAX,
-        fps: 0.0,
-        bus_load: 0.0,
-        win_start: std::time::Instant::now(),
-        win_frames: 0,
-        win_bits: 0,
-        chan_stats: std::collections::BTreeMap::new(),
-        pb_pos: 0,
-        pb_total: 0,
-        pb_playing: false,
-    }));
-    if let Some(error) = ipc_info_error {
-        app.borrow_mut().log(error);
-    }
-
-    ui.set_msgs(ModelRc::from(app.borrow().msg_model.clone()));
-    ui.set_logs(ModelRc::from(app.borrow().log_model.clone()));
-    ui.set_console_lines(ModelRc::from(app.borrow().console_model.clone()));
-    ui.set_dbc_signals(ModelRc::from(app.borrow().dbc_signal_model.clone()));
-    ui.set_chan_stats(ModelRc::from(app.borrow().chan_stat_model.clone()));
-    ui.set_id_stats(ModelRc::from(app.borrow().id_stat_model.clone()));
-    ui.set_sigs(ModelRc::from(app.borrow().sig_model.clone()));
-    ui.set_recent_projects(ModelRc::from(app.borrow().recent_project_model.clone()));
-
-    ui.set_series(ModelRc::from(app.borrow().chart_model.clone()));
-    let child_windows = ChildWindowStore::default();
-
-    // Main-window callbacks are ready immediately. Secondary windows and their
-    // callbacks are constructed together on the first request for a child tool.
-    wire_main(app.clone(), &ui, child_windows.clone());
-    wire_external_tools(app.clone(), &ui);
-    wire_lazy_window_openers(
-        app.clone(),
-        &ui,
-        child_windows.clone(),
-        ipc_port,
-        ipc_token.clone(),
-    );
-
-    {
-        let mut a = app.borrow_mut();
-
-        rebuild_dbc_snap(&mut a);
-
-        if let Some(s) = settings::load() {
-            a.recent_project_paths = s.recent_project_paths.clone();
-            refresh_recent_projects(&a);
-            apply_settings(&mut a, &ui, &s);
-            sim_migrate_dbc_bindings(&mut a);
-
-            ui.global::<Theme>().set_dark(s.dark);
-            ui.global::<Theme>().set_big(s.big);
-            ui.global::<I18n>().set_en(s.lang_en);
-            a.lang_en = s.lang_en;
-            a.log("已恢复上次配置".to_string());
-        }
-
-        if let Some(path) = std::env::args_os().skip(1).find_map(|arg| {
-            let p = std::path::PathBuf::from(arg);
-            let is_project = p
-                .extension()
-                .and_then(|x| x.to_str())
-                .map(|x| {
-                    x.eq_ignore_ascii_case("pcprj")
-                        || x.eq_ignore_ascii_case("zcp")
-                        || x.eq_ignore_ascii_case("json")
-                })
-                .unwrap_or(false);
-            if is_project { Some(p) } else { None }
-        }) {
-            match std::fs::read_to_string(&path)
-                .map_err(|e| format!("Read project failed: {e}"))
-                .and_then(|txt| {
-                    serde_json::from_str::<Project>(&txt)
-                        .map_err(|e| format!("Parse project failed: {e}"))
-                }) {
-                Ok(proj) => {
-                    a.project_name = if proj.name.trim().is_empty() {
-                        path.file_stem()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("CAN_Test_Project")
-                            .to_string()
-                    } else {
-                        proj.name.clone()
-                    };
-                    a.project_path = Some(path.clone());
-                    touch_recent_project(&mut a, &path);
-                    refresh_recent_projects(&a);
-                    persist_settings(&mut a, &ui);
-                    ui.set_project_open(true);
-                    a.sim_dirty = false;
-                    a.sim_revision = 0;
-                    let _ = configure_sim_generators(&a, false);
-                    a.sim_running = false;
-                    apply_settings(&mut a, &ui, &proj.settings);
-                    sim_migrate_dbc_bindings(&mut a);
-                    a.txs.clear();
-                    for dto in proj.txs {
-                        let h = a.next_handle;
-                        a.next_handle += 1;
-                        a.txs.push(dto.into_task(h));
-                    }
-                    a.last_tree_sig = u64::MAX;
-                    a.log(format!("Opened project: {}", path.display()));
-                }
-                Err(e) => a.log(e),
-            }
-        }
-    }
-
-    let timer = Timer::default();
-    {
-        let app = app.clone();
-        let uiw = ui.as_weak();
-        let child_windows = child_windows.clone();
-        timer.start(TimerMode::Repeated, Duration::from_millis(100), move || {
-            let windows = child_windows.get();
-            {
-                let mut a = app.borrow_mut();
-                while let Some(event) = a.recorder.try_event() {
-                    match event {
-                        recording::Event::Started { path, format } => {
-                            a.recording = true;
-                            a.rec_fmt = format;
-                            a.rec_path = Some(path.clone());
-                            a.log(format!("开始记录({}): {}", format.name(), path.display()));
-                        }
-                        recording::Event::Stopped {
-                            path,
-                            format,
-                            frames,
-                        } => {
-                            a.recording = false;
-                            a.log(format!(
-                                "已保存 {}: {}（{} 帧）",
-                                format.name(),
-                                path.display(),
-                                frames
-                            ));
-                        }
-                        recording::Event::Failed(error) => {
-                            a.recording = false;
-                            a.log(format!("记录失败并已停止: {error}"));
-                        }
-                    }
-                }
-                while let Ok(event) = worker_rx.try_recv() {
-                    match event {
-                        WorkerEvent::Log(message) => a.log(message),
-                        WorkerEvent::PlaybackParsed {
-                            replace,
-                            files,
-                            errors,
-                        } => {
-                            if replace {
-                                a.pb_files.clear();
-                            }
-                            let frame_count: usize =
-                                files.iter().map(|(_, frames)| frames.len()).sum();
-                            a.pb_files.extend(files);
-                            for error in errors {
-                                a.log(error);
-                            }
-                            let file_count = a.pb_files.len();
-                            a.log(format!(
-                                "已载入 {file_count} 个回放文件，本次 {frame_count} 帧"
-                            ));
-                            if let Some(windows) = windows.as_ref() {
-                                pb_apply_files(&mut a, &windows.playback);
-                            }
-                        }
-                        WorkerEvent::ConversionFinished { batch, status, log } => {
-                            if let Some(windows) = windows.as_ref() {
-                                if batch {
-                                    windows.convert.set_status2(status.into());
-                                } else {
-                                    windows.convert.set_status1(status.into());
-                                }
-                            }
-                            a.log(log);
-                        }
-                        WorkerEvent::DbcLoaded { path, result } => match result {
-                            Ok(db) => {
-                                let count = db.messages().count();
-                                a.log(format!("已加载 DBC: {} ({count} 条报文)", db.file_name));
-                                a.dbcs.push(db);
-                                a.dbc_paths.push(path);
-                                a.expanded_signal_cache.clear();
-                                rebuild_dbc_snap(&mut a);
-                            }
-                            Err(error) => a.log(format!("加载 DBC 失败: {error}")),
-                        },
-                        WorkerEvent::DbcReloaded { loaded, errors } => {
-                            a.dbcs.clear();
-                            a.dbc_paths.clear();
-                            a.expanded_signal_cache.clear();
-                            for (path, db) in loaded {
-                                a.dbc_paths.push(path);
-                                a.dbcs.push(db);
-                            }
-                            for error in errors {
-                                a.log(error);
-                            }
-                            rebuild_dbc_snap(&mut a);
-                            let count = a.dbcs.len();
-                            a.log(format!("已重新加载 {count} 个 DBC"));
-                        }
-                        WorkerEvent::ProjectLoaded { path, result } => match *result {
-                            Ok((mut project, loaded_dbcs, errors, replace_dbcs)) => {
-                                let Some(main_window) = uiw.upgrade() else {
-                                    continue;
-                                };
-                                let dark = project.settings.dark;
-                                let big = project.settings.big;
-                                let english = project.settings.lang_en;
-                                a.lang_en = english;
-                                project.settings.dbc_path = None;
-                                project.settings.dbc_paths.clear();
-                                let tasks = a.txs.clone();
-                                for task in &tasks {
-                                    stop_task_periodic(&a, task);
-                                }
-                                a.project_name = if project.name.trim().is_empty() {
-                                    path.file_stem()
-                                        .and_then(|name| name.to_str())
-                                        .unwrap_or("CAN_Test_Project")
-                                        .to_string()
-                                } else {
-                                    project.name
-                                };
-                                a.project_path = Some(path.clone());
-                                touch_recent_project(&mut a, &path);
-                                refresh_recent_projects(&a);
-                                persist_settings(&mut a, &main_window);
-                                main_window.set_project_open(true);
-                                a.sim_dirty = false;
-                                a.sim_revision = 0;
-                                let _ = configure_sim_generators(&a, false);
-                                a.sim_running = false;
-                                a.sim_sel = -1;
-                                a.sim_multi.clear();
-                                apply_settings(&mut a, &main_window, &project.settings);
-                                if replace_dbcs {
-                                    a.dbcs.clear();
-                                    a.dbc_paths.clear();
-                                    a.expanded_signal_cache.clear();
-                                    for (dbc_path, database) in loaded_dbcs {
-                                        a.dbc_paths.push(dbc_path);
-                                        a.dbcs.push(database);
-                                    }
-                                    rebuild_dbc_snap(&mut a);
-                                }
-                                sim_migrate_dbc_bindings(&mut a);
-                                a.txs.clear();
-                                let count = project.txs.len();
-                                for dto in project.txs {
-                                    let handle = a.next_handle;
-                                    a.next_handle += 1;
-                                    a.txs.push(dto.into_task(handle));
-                                }
-                                for error in errors {
-                                    a.log(error);
-                                }
-                                a.last_tree_sig = u64::MAX;
-                                a.log(format!(
-                                    "已打开工程: {}（发送任务 {count} 条，默认停发）",
-                                    path.display()
-                                ));
-
-                                main_window.global::<Theme>().set_dark(dark);
-                                main_window.global::<Theme>().set_big(big);
-                                main_window.global::<I18n>().set_en(english);
-                                if let Some(windows) = windows.as_ref() {
-                                    windows.set_dark(dark);
-                                    windows.set_big(big);
-                                    windows.set_language(english);
-                                }
-                            }
-                            Err(error) => a.log(error),
-                        },
-                        WorkerEvent::ProjectSaved {
-                            path,
-                            sim_revision,
-                            result,
-                        } => match result {
-                            Ok(()) => {
-                                a.project_path = Some(path.clone());
-                                touch_recent_project(&mut a, &path);
-                                refresh_recent_projects(&a);
-                                if let Some(main_window) = uiw.upgrade() {
-                                    persist_settings(&mut a, &main_window);
-                                }
-                                if a.sim_revision == sim_revision {
-                                    a.sim_dirty = false;
-                                }
-                                a.log(format!("已保存工程: {}", path.display()));
-                            }
-                            Err(error) => a.log(error),
-                        },
-                        WorkerEvent::TxFilePrepared {
-                            path,
-                            repeat,
-                            english,
-                            result,
-                        } => {
-                            if let Some(windows) = windows.as_ref() {
-                                let window = &windows.tx;
-                                match result {
-                                    Ok(TxFilePayload::Ota(job)) => {
-                                        let total = job.steps.len();
-                                        if !a.license_allows("firmware-update") {
-                                            window.set_tx_file_status(if english { "License required" } else { "需要有效授权" }.into());
-                                            continue;
-                                        }
-                                        if a.cmd.send(Cmd::OtaRun(job)).is_err() {
-                                            window.set_tx_file_status(
-                                                if english {
-                                                    "CAN backend has stopped"
-                                                } else {
-                                                    "CAN 后台线程已退出"
-                                                }
-                                                .into(),
-                                            );
-                                        } else {
-                                            window.set_tx_file_progress(0.0);
-                                            window.set_tx_file_status(
-                                                if english {
-                                                    format!("OTA started ({total} steps)")
-                                                } else {
-                                                    format!("OTA 已启动（{total} 步）")
-                                                }
-                                                .into(),
-                                            );
-                                        }
-                                    }
-                                    Ok(TxFilePayload::Frames(frames)) => {
-                                        let frame_count = frames.len();
-                                        let total = frame_count as u64 * repeat as u64;
-                                        let (ack_tx, ack_rx) = std::sync::mpsc::sync_channel(1);
-                                        let enqueue_result = match a.cmd.send(Cmd::SendBatch {
-                                            frames,
-                                            repeat,
-                                            ack: Some(ack_tx),
-                                        }) {
-                                            Ok(()) => ack_rx
-                                                .recv_timeout(std::time::Duration::from_millis(500))
-                                                .map_err(|_| "CAN 后台未在 500ms 内确认发送任务".to_string())
-                                                .and_then(|result| result),
-                                            Err(_) => Err("CAN 后台线程已退出或命令队列已满".to_string()),
-                                        };
-                                        if let Err(error) = enqueue_result {
-                                            window.set_tx_file_status(
-                                                if english {
-                                                    format!("Batch rejected: {error}")
-                                                } else {
-                                                    format!("批量发送未提交：{error}")
-                                                }
-                                                .into(),
-                                            );
-                                        } else {
-                                            window.set_tx_file_progress(1.0);
-                                            window.set_tx_file_status(
-                                                if english {
-                                                    format!(
-                                                        "Queued {total} frames ({frame_count} x {repeat})"
-                                                    )
-                                                } else {
-                                                    format!(
-                                                        "已提交 {total} 帧（{frame_count} 帧 x {repeat}）"
-                                                    )
-                                                }
-                                                .into(),
-                                            );
-                                            a.log(format!(
-                                                "File send queued: {path}, total {total} frames"
-                                            ));
-                                        }
-                                    }
-                                    Err(error) => window.set_tx_file_status(error.into()),
-                                }
-                            }
-                        }
-                        WorkerEvent::TxListLoaded(result) => match result {
-                            Ok(dtos) => {
-                                let tasks = a.txs.clone();
-                                for task in &tasks {
-                                    stop_task_periodic(&a, task);
-                                }
-                                a.txs.clear();
-                                let count = dtos.len();
-                                for dto in dtos {
-                                    let handle = a.next_handle;
-                                    a.next_handle += 1;
-                                    a.txs.push(dto.into_task(handle));
-                                }
-                                a.log(format!("已加载发送列表 {count} 条（默认停发）"));
-                            }
-                            Err(error) => a.log(format!("加载发送列表失败: {error}")),
-                        },
-                        WorkerEvent::HardwareScanned { pcan, zcan, elapsed_ms } => {
-                            a.pcan_devices = pcan;
-                            a.zcan_devices = zcan;
-                            a.hardware_scan_in_progress = false;
-                            a.hardware_scan_status = if a.pcan_devices.is_empty()
-                                && a.zcan_devices.is_empty()
-                            {
-                                if a.lang_en {
-                                    format!("No hardware found · {elapsed_ms} ms")
-                                } else {
-                                    format!("未发现硬件 · {elapsed_ms} ms")
-                                }
-                            } else if a.lang_en {
-                                format!(
-                                    "{} channel(s) detected · {elapsed_ms} ms",
-                                    a.pcan_devices.len() + a.zcan_devices.len()
-                                )
-                            } else {
-                                format!(
-                                    "已发现 {} 个物理通道 · {elapsed_ms} ms",
-                                    a.pcan_devices.len() + a.zcan_devices.len()
-                                )
-                            };
-                            reconcile_stable_hardware(&mut a);
-                            if let Some(windows) = windows.as_ref() {
-                                refresh_channel_window_lists(&windows.channel, &a);
-                                let selected = channel_selected(&a);
-                                if let Some(channel) = channel_configs(&a).get(selected as usize) {
-                                    set_chan_form(&windows.channel, channel, &a);
-                                }
-                            }
-                        }
-                    }
-                }
-                for _ in 0..64 {
-                    let Ok(ureq) = ipc_req_rx.try_recv() else {
-                        break;
-                    };
-                    handle_ipc(&mut a, ureq);
-                }
-                reap_child(&mut a);
-                drain_py_output(&mut a);
-                publish_snapshot(&mut a);
-
-                if a.py_dirty {
-                    if a.py_child.is_none() {
-                        let path = run_log_path();
-                        if let Err(error) = std::fs::write(&path, &a.py_output) {
-                            a.log(format!(
-                                "保存测试运行日志失败 {}: {error}",
-                                path.display()
-                            ));
-                            if !a.run_status.starts_with("FAIL") {
-                                a.run_status = "FAIL: 运行日志保存失败".into();
-                            }
-                        }
-                    }
-                    if let Some(windows) = windows.as_ref() {
-                        let w = &windows.script_runner;
-                        w.set_output(a.py_output.clone().into());
-                        w.set_running(a.py_child.is_some());
-                        let rs = a.run_status.clone();
-                        w.set_result(if rs.starts_with("PASS") {
-                            1
-                        } else if rs.starts_with("FAIL") {
-                            -1
-                        } else {
-                            0
-                        });
-                        w.set_status_text(rs.into());
-                    }
-                    a.py_dirty = false;
-                }
-            }
-            let ui = match uiw.upgrade() {
-                Some(u) => u,
-                None => return,
-            };
-            let mut a = app.borrow_mut();
-
-            let event_deadline = std::time::Instant::now() + MAX_CAN_EVENT_TIME_PER_TICK;
-            for _ in 0..MAX_CAN_EVENTS_PER_TICK {
-                if std::time::Instant::now() >= event_deadline {
-                    break;
-                }
-                let Ok(evt) = evt_rx.try_recv() else {
-                    break;
-                };
-                match evt {
-                    Evt::Frame(f) => {
-                        ipc_fanout(&a, &f);
-                        if let Some(windows) = windows.as_ref() {
-                            uds_observe_frame(&windows.uds, &f);
-                            xcp_observe_frame(&windows.xcp, &f);
-                        }
-                        a.ingest(f, false);
-                    }
-                    Evt::Frames(frames) => {
-                        for f in frames {
-                            ipc_fanout(&a, &f);
-                            if let Some(windows) = windows.as_ref() {
-                                uds_observe_frame(&windows.uds, &f);
-                                xcp_observe_frame(&windows.xcp, &f);
-                            }
-                            a.ingest(f, false);
-                        }
-                    }
-                    Evt::PlaybackFrame(f) => {
-                        ipc_fanout(&a, &f);
-                        if let Some(windows) = windows.as_ref() {
-                            uds_observe_frame(&windows.uds, &f);
-                            xcp_observe_frame(&windows.xcp, &f);
-                        }
-                        a.ingest(f, true);
-                    }
-                    Evt::Log(s) => a.log(s),
-                    Evt::Connected { channels, name, error } => {
-                        let attempted_from_config = a.channel_connect_pending;
-                        let expected = a.channel_connect_expected;
-                        a.connected = !channels.is_empty();
-                        a.connected_channels = channels.into_iter().collect();
-                        if a.connected && !name.is_empty() {
-                            a.conn_name = name.clone();
-                            a.log(format!("后端: {name}"));
-                        } else if !a.connected {
-                            a.conn_name.clear();
-                        }
-                        if attempted_from_config {
-                            a.channel_connect_pending = false;
-                            a.channel_connect_expected = 0;
-                            if let Some(windows) = windows.as_ref() {
-                                windows.channel.set_connecting(false);
-                                let success = error.is_none()
-                                    && expected > 0
-                                    && a.connected_channels.len() == expected;
-                                if success {
-                                    windows.channel.set_validation_is_error(false);
-                                    windows.channel.set_validation_message(
-                                        if a.lang_en {
-                                            "All channels connected"
-                                        } else {
-                                            "全部通道连接成功"
-                                        }
-                                        .into(),
-                                    );
-                                    a.channel_edit = None;
-                                    let _ = windows.channel.hide();
-                                } else {
-                                    windows.channel.set_validation_is_error(true);
-                                    windows.channel.set_validation_message(
-                                        error
-                                            .unwrap_or_else(|| {
-                                                if a.lang_en {
-                                                    "Channel connection failed".into()
-                                                } else {
-                                                    "通道连接失败，请检查设备状态和参数".into()
-                                                }
-                                            })
-                                            .into(),
-                                    );
-                                }
-                            }
-                        }
-                    }
-                    Evt::Running(r) => a.running = r,
-                    Evt::Playback(pos, total, playing) => {
-                        a.pb_pos = pos;
-                        a.pb_total = total;
-                        a.pb_playing = playing;
-                    }
-                    Evt::PeriodicDone(handle) => {
-                        if let Some(t) = a.txs.iter_mut().find(|t| t.handle == handle) {
-                            t.periodic = false;
-                            a.tx_list_cache = u64::MAX;
-                        }
-                    }
-                    Evt::DynamicUpdate {
-                        handle,
-                        data,
-                        signal_values,
-                        sent,
-                    } => {
-                        if let Some(t) = a.txs.iter_mut().find(|t| t.handle == handle) {
-                            t.data = data;
-                            t.sig_values = signal_values;
-                            t.sent = sent;
-                            a.tx_list_cache = u64::MAX;
-                        }
-                    }
-                    Evt::CaptureHealth {
-                        dropped_frames,
-                        dropped_events,
-                        hardware_overruns,
-                        hardware_errors,
-                        queue_depth,
-                        queue_capacity,
-                        queue_high_watermark,
-                        command_rejected,
-                        command_queue_depth,
-                        command_queue_capacity,
-                        command_queue_high_watermark,
-                        timestamp_samples,
-                        timestamp_latest_jitter_us,
-                        timestamp_max_jitter_us,
-                        timestamp_drift_ppm,
-                        timestamp_monotonic_violations,
-                    } => {
-                        if dropped_frames > a.capture_dropped_frames {
-                            let newly_dropped = dropped_frames - a.capture_dropped_frames;
-                            a.log(format!(
-                                "严重: CAN UI 队列已丢失 {} 帧（累计 {}），请降低显示负载或停止测量",
-                                newly_dropped,
-                                dropped_frames
-                            ));
-                        }
-                        if command_rejected > a.command_rejected {
-                            let newly_rejected = command_rejected - a.command_rejected;
-                            a.log(format!(
-                                "严重: CAN 命令队列拒绝了 {} 个操作（累计 {}），操作未执行",
-                                newly_rejected, command_rejected
-                            ));
-                        }
-                        a.capture_dropped_frames = dropped_frames;
-                        a.capture_dropped_events = dropped_events;
-                        a.capture_hardware_overruns = hardware_overruns;
-                        a.capture_hardware_errors = hardware_errors;
-                        a.capture_queue_depth = queue_depth;
-                        a.capture_queue_capacity = queue_capacity;
-                        a.capture_queue_high_watermark = queue_high_watermark;
-                        a.command_rejected = command_rejected;
-                        a.command_queue_depth = command_queue_depth;
-                        a.command_queue_capacity = command_queue_capacity;
-                        a.command_queue_high_watermark = command_queue_high_watermark;
-                        a.timestamp_samples = timestamp_samples;
-                        a.timestamp_latest_jitter_us = timestamp_latest_jitter_us;
-                        a.timestamp_max_jitter_us = timestamp_max_jitter_us;
-                        a.timestamp_drift_ppm = timestamp_drift_ppm;
-                        a.timestamp_monotonic_violations = timestamp_monotonic_violations;
-                    }
-                    Evt::ShutdownFinished => {
-                        if let Err(error) = slint::quit_event_loop() {
-                            eprintln!("Failed to quit Slint event loop: {error}");
-                        }
-                    }
-                    Evt::OtaProgress(done, total, text) => {
-                        let progress = if total == 0 {
-                            0.0
-                        } else {
-                            done as f32 / total as f32
-                        };
-                        if let Some(windows) = windows.as_ref() {
-                            windows.tx.set_tx_file_progress(progress.clamp(0.0, 1.0));
-                            windows.tx.set_tx_file_status(text.clone().into());
-                            windows.uds.set_ota_status(text.clone().into());
-                            windows.xcp.set_ota_status(text.clone().into());
-                        }
-                        a.log(text);
-                    }
-                }
-            }
-
-            let dt = a.win_start.elapsed().as_secs_f64();
-            if dt >= 1.0 {
-                a.fps = a.win_frames as f64 / dt;
-                let default_bps = baud_bps(&a.device_cfg.baud);
-
-                let bps_of: std::collections::HashMap<u8, f64> = a
-                    .channels
-                    .iter()
-                    .map(|c| (c.sw_channel, baud_bps(&c.baud)))
-                    .collect();
-                let mut max_load = 0.0_f64;
-                for (ch, cs) in a.chan_stats.iter_mut() {
-                    cs.fps = cs.win_frames as f64 / dt;
-                    let bps = bps_of.get(ch).copied().unwrap_or(default_bps);
-                    cs.bus_load = if bps > 0.0 {
-                        (cs.win_bits as f64 / dt / bps * 100.0).min(100.0)
-                    } else {
-                        0.0
-                    };
-                    if cs.bus_load > max_load {
-                        max_load = cs.bus_load;
-                    }
-                    cs.win_frames = 0;
-                    cs.win_bits = 0;
-                }
-                a.bus_load = max_load;
-                a.win_frames = 0;
-                a.win_bits = 0;
-                a.win_start = std::time::Instant::now();
-            }
-
-            sim_tick(&mut a);
-            refresh_sim(&a);
-            if let Some(windows) = windows.as_ref() {
-                refresh_sim_context(&windows.sim_panel, &a);
-            }
-
-            refresh_ui(&mut a, &ui, windows.as_deref());
-        });
-    }
-
-    let pb_timer = Timer::default();
-    {
-        let app = app.clone();
-        let child_windows = child_windows.clone();
-        pb_timer.start(TimerMode::Repeated, Duration::from_millis(150), move || {
-            let Some(windows) = child_windows.get() else {
-                return;
-            };
-            let w = &windows.playback;
-            let a = app.borrow();
-            let en = a.lang_en;
-            w.set_pos(a.pb_pos.to_string().into());
-            w.set_total(a.pb_total.to_string().into());
-            w.set_playing(a.pb_playing);
-            w.set_status(
-                if a.pb_total == 0 {
-                    if en {
-                        "No file loaded"
-                    } else {
-                        "未载入文件"
-                    }
-                } else if a.pb_playing {
-                    if en { "Playing" } else { "回放中" }
-                } else if a.pb_pos >= a.pb_total {
-                    if en { "Done" } else { "回放完成" }
-                } else {
-                    if en {
-                        "Ready / Paused"
-                    } else {
-                        "就绪/已暂停"
-                    }
-                }
-                .into(),
-            );
-        });
-    }
-
-    #[cfg(windows)]
-    let _titlebar_timer = {
-        let t = slint::Timer::default();
-        t.start(
-            slint::TimerMode::Repeated,
-            std::time::Duration::from_millis(500),
-            apply_brand_titlebar,
-        );
-        apply_brand_titlebar();
-        t
-    };
-
-    #[cfg(debug_assertions)]
-    if std::env::var_os("PCANWORK_DEBUG_OPEN_SIM").is_some() {
-        let ui = ui.as_weak();
-        slint::Timer::single_shot(std::time::Duration::from_millis(250), move || {
-            if let Some(ui) = ui.upgrade() {
-                ui.invoke_open_sim_panel_window();
-            }
-        });
-    }
-
-    #[cfg(debug_assertions)]
-    if std::env::var_os("PCANWORK_DEBUG_TEST_SIM_LIBRARY").is_some() {
-        let ui = ui.as_weak();
-        let app = app.clone();
-        let child_windows = child_windows.clone();
-        slint::Timer::single_shot(std::time::Duration::from_millis(300), move || {
-            let Some(ui) = ui.upgrade() else { return };
-            ui.invoke_open_sim_panel_window();
-            let app = app.clone();
-            let child_windows = child_windows.clone();
-            slint::Timer::single_shot(std::time::Duration::from_millis(450), move || {
-                let Some(windows) = child_windows.get() else {
-                    panic!("simulation child windows were not created");
-                };
-                let panel = &windows.sim_panel;
-                panel.invoke_signal_library_refresh();
-                panel.invoke_signal_library_row_clicked(0, false);
-                let rows = panel.get_signal_library_rows();
-                let message_index = (0..rows.row_count())
-                    .find(|index| {
-                        rows.row_data(*index)
-                            .is_some_and(|row| row.kind == "message")
-                    })
-                    .expect("DBC signal library did not expose a message")
-                    as i32;
-                panel.invoke_signal_library_row_clicked(message_index, false);
-                let rows = panel.get_signal_library_rows();
-                let signal_index = (0..rows.row_count())
-                    .find(|index| {
-                        rows.row_data(*index)
-                            .is_some_and(|row| row.kind == "signal")
-                    })
-                    .expect("DBC signal library did not expose a signal")
-                    as i32;
-                panel.invoke_signal_library_activate(signal_index);
-                {
-                    let app = app.borrow();
-                    assert!(
-                        app.sim_widgets
-                            .iter()
-                            .any(|widget| !widget.signal.is_empty()),
-                        "DBC signal library activation did not bind or create a control"
-                    );
-                }
-                let before_drop = app.borrow().sim_widgets.len();
-                panel.invoke_signal_library_drop(signal_index, 900.0, 240.0);
-                assert_eq!(
-                    app.borrow().sim_widgets.len(),
-                    before_drop + 1,
-                    "dropping a DBC signal on blank canvas did not create a control"
-                );
-                let (target_x, target_y, before_rebind) = {
-                    let app = app.borrow();
-                    let widget = &app.sim_widgets[0];
-                    (
-                        (widget.x + widget.w / 2.0) as f32,
-                        (widget.y + widget.h / 2.0) as f32,
-                        app.sim_widgets.len(),
-                    )
-                };
-                panel.invoke_signal_library_drop(signal_index, target_x, target_y);
-                assert_eq!(
-                    app.borrow().sim_widgets.len(),
-                    before_rebind,
-                    "dropping on an existing control unexpectedly created another control"
-                );
-                panel.invoke_signal_library_create(-1, SimKind::Indicator.to_i32());
-                assert!(
-                    app.borrow().sim_widgets.len() > before_rebind,
-                    "batch create from marked signals did not create a control"
-                );
-            });
-        });
-    }
-
-    ui.run()?;
-    Ok(())
+    startup::main()
 }
 
 fn open_external_url(url: &str) -> std::io::Result<()> {
@@ -3357,149 +2340,8 @@ fn detect_virtual_display() -> bool {
     false
 }
 
-fn pb_apply_files(a: &mut App, w: &PlaybackWindow) {
-    let concat = w.get_merge_concat();
-    let mut out: Vec<CanFrame> = Vec::new();
-    if concat {
-        let mut cursor = 0.0_f64;
-        for (_, fr) in &a.pb_files {
-            if fr.is_empty() {
-                continue;
-            }
-            let fmin = fr.iter().map(|f| f.t).fold(f64::INFINITY, f64::min);
-            let fmax = fr.iter().map(|f| f.t).fold(f64::NEG_INFINITY, f64::max);
-            let shift = cursor - fmin;
-            for f in fr {
-                let mut g = f.clone();
-                g.t += shift;
-                out.push(g);
-            }
-            cursor += (fmax - fmin) + 0.001;
-        }
-    } else {
-        for (_, fr) in &a.pb_files {
-            out.extend(fr.iter().cloned());
-        }
-    }
-    out.sort_by(|x, y| x.t.partial_cmp(&y.t).unwrap_or(std::cmp::Ordering::Equal));
-    a.pb_raw = out;
-
-    let en = a.lang_en;
-    let total = a.pb_raw.len();
-    let names: Vec<String> = a.pb_files.iter().map(|(n, _)| n.clone()).collect();
-    let fname = match names.len() {
-        0 => {
-            if en {
-                "(no file selected)".to_string()
-            } else {
-                "(未选择文件)".to_string()
-            }
-        }
-        1 => {
-            if en {
-                format!("{} ({total} frames)", names[0])
-            } else {
-                format!("{} ({total} 帧)", names[0])
-            }
-        }
-        n => {
-            if en {
-                format!("{n} files: {} ({total} frames)", names.join(", "))
-            } else {
-                format!("{n} 个文件: {} ({total} 帧)", names.join(", "))
-            }
-        }
-    };
-    w.set_file_name(fname.into());
-
-    let mut chans: Vec<u8> = a.pb_raw.iter().map(|f| f.ch).collect();
-    chans.sort_unstable();
-    chans.dedup();
-    let ctxt = if chans.is_empty() {
-        "-".to_string()
-    } else {
-        chans
-            .iter()
-            .map(|c| c.to_string())
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-    w.set_src_channels(ctxt.into());
-
-    let rows: Vec<PbFileRow> = a
-        .pb_files
-        .iter()
-        .map(|(n, fr)| PbFileRow {
-            name: n.clone().into(),
-            count: if en {
-                format!("{} frames", fr.len())
-            } else {
-                format!("{} 帧", fr.len())
-            }
-            .into(),
-        })
-        .collect();
-    w.set_pb_files(ModelRc::from(Rc::new(VecModel::from(rows))));
-
-    pb_build_and_load(a, w);
-}
-
-fn pb_build_and_load(a: &App, w: &PlaybackWindow) {
-    let lo = parse_hex_u32(&w.get_id_lo()).unwrap_or(0);
-    let hi = parse_hex_u32(&w.get_id_hi()).unwrap_or(u32::MAX);
-    let ss = w
-        .get_seg_start()
-        .to_string()
-        .trim()
-        .parse::<f64>()
-        .unwrap_or(f64::MIN);
-    let se = w
-        .get_seg_end()
-        .to_string()
-        .trim()
-        .parse::<f64>()
-        .unwrap_or(f64::MAX);
-    let map = parse_channel_map(&w.get_channel_map());
-    let frames: Vec<CanFrame> = a
-        .pb_raw
-        .iter()
-        .filter(|f| f.id >= lo && f.id <= hi && f.t >= ss && f.t <= se)
-        .filter_map(|f| {
-            let dst = map.get(&f.ch).copied().unwrap_or(f.ch);
-            if dst == 0 {
-                return None;
-            }
-            let mut g = f.clone();
-            g.ch = dst;
-            Some(g)
-        })
-        .collect();
-    let _ = a.cmd.send(Cmd::PlaybackLoad(frames));
-}
-
-fn parse_channel_map(s: &slint::SharedString) -> std::collections::HashMap<u8, u8> {
-    let mut m = std::collections::HashMap::new();
-    for tok in s.as_str().split(',') {
-        let tok = tok.trim();
-        if let Some((a, b)) = tok.split_once(':')
-            && let (Ok(src), Ok(dst)) = (a.trim().parse::<u8>(), b.trim().parse::<u8>())
-        {
-            m.insert(src, dst);
-        }
-    }
-    m
-}
-
-fn parse_hex_u32(s: &slint::SharedString) -> Option<u32> {
-    let t = s.to_string();
-    let t = t.trim();
-    if t.is_empty() {
-        return None;
-    }
-    let t = t.trim_start_matches("0x").trim_start_matches("0X");
-    u32::from_str_radix(t, 16).ok()
-}
-
+mod playback_view;
+use playback_view::*;
 /// True if the task has at least one signal with a real (non-None) variation mode.
 fn has_vary(t: &TxTask) -> bool {
     t.varies
@@ -3825,728 +2667,11 @@ fn ch_from_name(s: &str) -> u8 {
         .max(1)
 }
 
-fn default_channel() -> DeviceConfig {
-    DeviceConfig {
-        sw_channel: 1,
-        is_fd: false,
-        device_type: "Virtual".into(),
-        hardware_label: String::new(),
-        hardware_id: String::new(),
-        device_index: 0,
-        channel_index: 0,
-        baud: "500K".into(),
-        data_baud: "2M".into(),
-        custom_bitrate: String::new(),
-        termination: false,
-        listen_only: false,
-        fd_non_iso: false,
-        net_server: true,
-        ip: "192.168.0.178".into(),
-        port: "8000".into(),
-    }
-}
+mod channel_management;
+use channel_management::*;
 
-fn renumber_channel_slice(channels: &mut [DeviceConfig]) {
-    for (i, c) in channels.iter_mut().enumerate() {
-        c.sw_channel = (i + 1) as u8;
-    }
-}
-
-fn channel_configs(a: &App) -> &[DeviceConfig] {
-    a.channel_edit
-        .as_ref()
-        .map(|session| session.channels.as_slice())
-        .unwrap_or(a.channels.as_slice())
-}
-
-fn channel_selected(a: &App) -> i32 {
-    a.channel_edit
-        .as_ref()
-        .map(|session| session.selected)
-        .unwrap_or(a.channel_sel)
-}
-
-fn ensure_channel_edit_session(a: &mut App) {
-    if a.channel_edit.is_none() {
-        a.channel_edit = Some(ChannelEditSession {
-            channels: a.channels.clone(),
-            selected: a.channel_sel,
-            dirty: false,
-        });
-    }
-}
-
-fn set_chan_form(w: &ChannelConfigWindow, c: &DeviceConfig, a: &App) {
-    let device_upper = c.device_type.trim().to_ascii_uppercase();
-    let detected_pcan = a.pcan_devices.iter().find(|hardware| {
-        (!c.hardware_id.is_empty() && c.hardware_id == pcan_hardware_id(hardware))
-            || (device_upper == "PCAN" && hardware.channel_index == c.channel_index)
-    });
-    let detected_zcan = a.zcan_devices.iter().find(|hardware| {
-        (!c.hardware_id.is_empty() && c.hardware_id == zcan_hardware_id(hardware))
-            || (hardware.device_type.eq_ignore_ascii_case(&c.device_type)
-                && hardware.device_index == c.device_index
-                && hardware.channel_index == c.channel_index)
-    });
-    let is_zlg_fd = device_upper.contains("USBCANFD");
-    let is_network_fd = device_upper.contains("CANFDNET") || device_upper.contains("CANFDWIFI");
-    let supports_fd = detected_pcan
-        .map(|hardware| hardware.fd_capable)
-        .or_else(|| detected_zcan.map(|hardware| hardware.fd_capable))
-        .unwrap_or(is_zlg_fd || is_network_fd || c.is_fd);
-    let supports_termination = is_zlg_fd;
-    let supports_listen_only = device_upper != "PCAN"
-        && (detected_zcan.is_some()
-            || is_zlg_fd
-            || device_upper.contains("USBCAN")
-            || matches!(device_upper.as_str(), "GCAN" | "ZHCX" | "ZHCXCAN"));
-    let supports_non_iso = supports_fd && device_upper != "PCAN";
-    let identity = if !c.hardware_id.is_empty() {
-        c.hardware_id.clone()
-    } else if let Some(hardware) = detected_pcan {
-        pcan_hardware_id(hardware)
-    } else if let Some(hardware) = detected_zcan {
-        zcan_hardware_id(hardware)
-    } else {
-        String::new()
-    };
-    let state = if detected_pcan.is_some() || detected_zcan.is_some() {
-        if a.lang_en {
-            "Detected and matched"
-        } else {
-            "已检测并匹配"
-        }
-    } else if identity.is_empty() {
-        if a.lang_en {
-            "Manual mapping; verify indices before connecting"
-        } else {
-            "手动映射，连接前请核对索引"
-        }
-    } else if a.lang_en {
-        "Saved hardware is currently offline"
-    } else {
-        "已保存的硬件当前不在线"
-    };
-    let arbitration = if device_upper == "PCAN" && supports_fd {
-        vec!["1M", "800K", "500K", "250K", "125K"]
-    } else if device_upper == "PCAN" {
-        vec!["1M", "500K", "250K", "125K"]
-    } else if supports_fd {
-        vec!["1M", "800K", "500K", "250K", "125K"]
-    } else {
-        vec![
-            "1M", "800K", "500K", "250K", "125K", "100K", "50K", "20K", "10K", "5K",
-        ]
-    };
-    let data_rates = vec!["8M", "5M", "4M", "2M", "1M", "800K", "500K", "250K", "125K"];
-    w.set_is_fd(c.is_fd);
-    w.set_device_type(c.device_type.clone().into());
-    w.set_hardware_label(c.hardware_label.clone().into());
-    w.set_device_index(c.device_index.to_string().into());
-    w.set_channel_index((c.channel_index + 1).to_string().into());
-    w.set_baud(c.baud.clone().into());
-    w.set_data_baud(c.data_baud.clone().into());
-    w.set_custom_bitrate(c.custom_bitrate.clone().into());
-    w.set_termination(c.termination);
-    w.set_listen_only(c.listen_only);
-    w.set_fd_non_iso(c.fd_non_iso);
-    w.set_manual_mode(c.hardware_id.is_empty());
-    w.set_supports_fd(supports_fd);
-    w.set_supports_termination(supports_termination);
-    w.set_supports_listen_only(supports_listen_only);
-    w.set_supports_non_iso(supports_non_iso);
-    w.set_arb_baud_options(ModelRc::from(Rc::new(VecModel::from(
-        arbitration
-            .into_iter()
-            .map(SharedString::from)
-            .collect::<Vec<_>>(),
-    ))));
-    w.set_data_baud_options(ModelRc::from(Rc::new(VecModel::from(
-        data_rates
-            .into_iter()
-            .map(SharedString::from)
-            .collect::<Vec<_>>(),
-    ))));
-    w.set_hardware_identity(identity.into());
-    w.set_device_state(state.into());
-    w.set_net_server(c.net_server);
-    w.set_ip(c.ip.clone().into());
-    w.set_port(c.port.clone().into());
-}
-
-fn chan_list_strings(a: &App) -> Vec<SharedString> {
-    channel_configs(a)
-        .iter()
-        .map(|c| {
-            let label = c.hardware_label.trim();
-            let label = if label.is_empty() { "Unnamed" } else { label };
-            let proto = if c.is_fd { "CAN FD" } else { "CAN" };
-            format!("CAN{}  {}  {}", c.sw_channel, label, proto).into()
-        })
-        .collect()
-}
-
-fn chan_detail_strings(a: &App) -> Vec<SharedString> {
-    channel_configs(a)
-        .iter()
-        .map(|c| {
-            let dev = c.device_type.trim();
-            let bus = if dev.eq_ignore_ascii_case("PCAN") {
-                if let Some(hw) = a
-                    .pcan_devices
-                    .iter()
-                    .find(|hw| hw.channel_index == c.channel_index)
-                {
-                    format!(
-                        "{} {}: Device ID {:X}h",
-                        hw.channel_name, hw.device_name, hw.device_id
-                    )
-                } else {
-                    format!("PCAN_USBBUS{} not detected", c.channel_index + 1)
-                }
-            } else if dev.to_ascii_uppercase().contains("NET")
-                || dev.to_ascii_uppercase().contains("WIFI")
-            {
-                format!("{}:{}", c.ip, c.port)
-            } else {
-                format!("dev{} CAN{}", c.device_index, c.channel_index + 1)
-            };
-            let pcan_cap = if dev.eq_ignore_ascii_case("PCAN") {
-                a.pcan_devices
-                    .iter()
-                    .find(|hw| hw.channel_index == c.channel_index)
-                    .map(|hw| hw.fd_capable)
-            } else {
-                None
-            };
-            let proto = if c.is_fd {
-                let mut s = format!("CANFD {}/{}", c.baud, c.data_baud);
-                if matches!(pcan_cap, Some(false)) {
-                    s.push_str(" !");
-                }
-                s
-            } else {
-                format!("CAN {}", c.baud)
-            };
-            format!("{}  {}  {}", dev, bus, proto).into()
-        })
-        .collect()
-}
-
-struct HardwareDisplayRows {
-    titles: Vec<SharedString>,
-    details: Vec<SharedString>,
-    added: Vec<bool>,
-    groups: Vec<bool>,
-    sources: Vec<i32>,
-    enabled: Vec<bool>,
-}
-
-impl HardwareDisplayRows {
-    fn push(
-        &mut self,
-        title: String,
-        detail: String,
-        added: bool,
-        group: bool,
-        source: i32,
-        enabled: bool,
-    ) {
-        self.titles.push(title.into());
-        self.details.push(detail.into());
-        self.added.push(added);
-        self.groups.push(group);
-        self.sources.push(source);
-        self.enabled.push(enabled);
-    }
-}
-
-fn pcan_hardware_id(hw: &can::PcanChannelInfo) -> String {
-    format!("PCAN:{:08X}:{}", hw.device_id, hw.channel_index)
-}
-
-fn zcan_hardware_id(hw: &can::ZcanUsbChannelInfo) -> String {
-    let identity = if hw.serial_number.trim().is_empty() {
-        format!("DEV{}", hw.device_index)
-    } else {
-        hw.serial_number.trim().to_ascii_uppercase()
-    };
-    format!(
-        "{}:{}:{}",
-        hw.device_type.trim().to_ascii_uppercase(),
-        identity,
-        hw.channel_index
-    )
-}
-
-fn hardware_display_rows(
-    devices: &[can::PcanChannelInfo],
-    zcan_devices: &[can::ZcanUsbChannelInfo],
-    channels: &[DeviceConfig],
-    english: bool,
-) -> HardwareDisplayRows {
-    let mut result = HardwareDisplayRows {
-        titles: Vec::new(),
-        details: Vec::new(),
-        added: Vec::new(),
-        groups: Vec::new(),
-        sources: Vec::new(),
-        enabled: Vec::new(),
-    };
-    let mut pcan_groups =
-        std::collections::BTreeMap::<(u32, String), Vec<(usize, &can::PcanChannelInfo)>>::new();
-    for (index, hw) in devices.iter().enumerate() {
-        pcan_groups
-            .entry((hw.device_id, hw.device_name.clone()))
-            .or_default()
-            .push((index, hw));
-    }
-    for ((device_id, device_name), rows) in pcan_groups {
-        result.push(
-            format!("PEAK  {device_name}"),
-            format!("Device ID {device_id:08X}h · {} channel(s)", rows.len()),
-            false,
-            true,
-            -1,
-            false,
-        );
-        for (source, hw) in rows {
-            let stable_id = pcan_hardware_id(hw);
-            let is_added = channels.iter().any(|channel| {
-                (!channel.hardware_id.is_empty() && channel.hardware_id == stable_id)
-                    || (channel.device_type.eq_ignore_ascii_case("PCAN")
-                        && channel.channel_index == hw.channel_index)
-            });
-            let condition = match hw.channel_condition {
-                1 => {
-                    if english {
-                        "available"
-                    } else {
-                        "可用"
-                    }
-                }
-                2 | 4 => {
-                    if english {
-                        "in use"
-                    } else {
-                        "已占用"
-                    }
-                }
-                _ => {
-                    if english {
-                        "unavailable"
-                    } else {
-                        "不可用"
-                    }
-                }
-            };
-            result.push(
-                format!("↳ {}", hw.channel_name),
-                format!(
-                    "{} · {}",
-                    if hw.fd_capable {
-                        "CAN FD"
-                    } else {
-                        "Classical CAN"
-                    },
-                    condition
-                ),
-                is_added,
-                false,
-                source as i32,
-                hw.channel_condition == 1 || is_added,
-            );
-        }
-    }
-
-    let offset = devices.len();
-    let mut zcan_groups =
-        std::collections::BTreeMap::<String, Vec<(usize, &can::ZcanUsbChannelInfo)>>::new();
-    for (index, hw) in zcan_devices.iter().enumerate() {
-        let serial = if hw.serial_number.trim().is_empty() {
-            format!("dev{}", hw.device_index)
-        } else {
-            format!("SN {}", hw.serial_number.trim())
-        };
-        let key = format!("{}|{}|{}", hw.device_type, serial, hw.hardware_label);
-        zcan_groups.entry(key).or_default().push((index, hw));
-    }
-    for (_key, rows) in zcan_groups {
-        let first = rows[0].1;
-        let vendor = match first.device_type.to_ascii_uppercase().as_str() {
-            "GCAN" => "GCAN",
-            "ZHCX" | "ZHCXCAN" => "ZHCX",
-            _ => "ZLG",
-        };
-        let identity = if first.serial_number.trim().is_empty() {
-            format!("dev{}", first.device_index)
-        } else {
-            format!("SN {}", first.serial_number.trim())
-        };
-        result.push(
-            format!("{vendor}  {}", first.hardware_label),
-            format!("{identity} · {} channel(s)", rows.len()),
-            false,
-            true,
-            -1,
-            false,
-        );
-        for (source, hw) in rows {
-            let stable_id = zcan_hardware_id(hw);
-            let is_added = channels.iter().any(|channel| {
-                (!channel.hardware_id.is_empty() && channel.hardware_id == stable_id)
-                    || (channel.device_type.eq_ignore_ascii_case(&hw.device_type)
-                        && channel.device_index == hw.device_index
-                        && channel.channel_index == hw.channel_index)
-            });
-            result.push(
-                format!("↳ CAN{}", hw.channel_index + 1),
-                format!(
-                    "{} · dev{} ch{}",
-                    if hw.fd_capable {
-                        "CAN FD"
-                    } else {
-                        "Classical CAN"
-                    },
-                    hw.device_index,
-                    hw.channel_index
-                ),
-                is_added,
-                false,
-                (offset + source) as i32,
-                true,
-            );
-        }
-    }
-
-    if result.titles.is_empty() {
-        result.titles.push(
-            if english {
-                "No CAN hardware detected"
-            } else {
-                "未发现 CAN 硬件"
-            }
-            .into(),
-        );
-        result.details.push(
-            if english {
-                "Check USB connection, driver installation, and device occupancy"
-            } else {
-                "请检查 USB、驱动安装以及设备是否被其他软件占用"
-            }
-            .into(),
-        );
-        result.added.push(false);
-        result.groups.push(true);
-        result.sources.push(-1);
-        result.enabled.push(false);
-    }
-    result
-}
-
-fn refresh_and_reconcile_pcan(a: &mut App) {
-    reconcile_stable_hardware(a);
-    let configured = a
-        .channels
-        .iter()
-        .enumerate()
-        .filter(|(_, channel)| channel.device_type.eq_ignore_ascii_case("PCAN"))
-        .map(|(index, _)| index)
-        .collect::<Vec<_>>();
-    if configured.len() != 1 || a.pcan_devices.len() != 1 {
-        return;
-    }
-    let config_index = configured[0];
-    let hardware = a.pcan_devices[0].clone();
-    let configured_index = a.channels[config_index].channel_index;
-    if configured_index == hardware.channel_index {
-        return;
-    }
-    a.channels[config_index].channel_index = hardware.channel_index;
-    if a.channels[config_index].hardware_label.trim().is_empty() {
-        a.channels[config_index].hardware_label = hardware.device_name.clone();
-    }
-    a.log(format!(
-        "PCAN 硬件通道已自动校正: PCAN_USBBUS{} → {}",
-        configured_index + 1,
-        hardware.channel_name
-    ));
-}
-
-fn reconcile_stable_hardware(a: &mut App) {
-    for channel in &mut a.channels {
-        if channel.hardware_id.is_empty() {
-            continue;
-        }
-        if let Some(hardware) = a
-            .pcan_devices
-            .iter()
-            .find(|hardware| pcan_hardware_id(hardware) == channel.hardware_id)
-        {
-            channel.device_type = "PCAN".into();
-            channel.device_index = 0;
-            channel.channel_index = hardware.channel_index;
-            if channel.hardware_label.trim().is_empty() {
-                channel.hardware_label = hardware.device_name.clone();
-            }
-            continue;
-        }
-        if let Some(hardware) = a
-            .zcan_devices
-            .iter()
-            .find(|hardware| zcan_hardware_id(hardware) == channel.hardware_id)
-        {
-            channel.device_type = hardware.device_type.clone();
-            channel.device_index = hardware.device_index;
-            channel.channel_index = hardware.channel_index;
-            if channel.hardware_label.trim().is_empty() {
-                channel.hardware_label = hardware.hardware_label.clone();
-            }
-        }
-    }
-    if let Some(session) = a.channel_edit.as_mut() {
-        for channel in &mut session.channels {
-            if channel.hardware_id.is_empty() {
-                continue;
-            }
-            if let Some(hardware) = a
-                .pcan_devices
-                .iter()
-                .find(|hardware| pcan_hardware_id(hardware) == channel.hardware_id)
-            {
-                channel.device_type = "PCAN".into();
-                channel.device_index = 0;
-                channel.channel_index = hardware.channel_index;
-            } else if let Some(hardware) = a
-                .zcan_devices
-                .iter()
-                .find(|hardware| zcan_hardware_id(hardware) == channel.hardware_id)
-            {
-                channel.device_type = hardware.device_type.clone();
-                channel.device_index = hardware.device_index;
-                channel.channel_index = hardware.channel_index;
-            }
-        }
-    }
-}
-
-fn scan_attached_hardware(a: &mut App) -> bool {
-    const MIN_SCAN_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
-    let now = std::time::Instant::now();
-    if a.last_hardware_scan
-        .is_some_and(|last| now.saturating_duration_since(last) < MIN_SCAN_INTERVAL)
-    {
-        return false;
-    }
-
-    // Some vendor USB-CAN drivers are not re-entrant and can corrupt their
-    // internal state when OpenDevice/CloseDevice is called repeatedly in a
-    // tight loop. Mark the scan before entering the DLL so re-entrant UI
-    // callbacks cannot start a second scan.
-    a.last_hardware_scan = Some(now);
-    if a.hardware_scan_in_progress {
-        return false;
-    }
-    a.hardware_scan_in_progress = true;
-    a.hardware_scan_status = if a.lang_en {
-        "Scanning PEAK, ZLG, GCAN and ZHCX drivers...".into()
-    } else {
-        "正在扫描 PEAK、ZLG、GCAN 与 ZHCX 驱动...".into()
-    };
-    let worker = a.worker_tx.clone();
-    let retained_zcan = a.connected.then(|| a.zcan_devices.clone());
-    std::thread::spawn(move || {
-        let started = std::time::Instant::now();
-        let pcan = can::pcan_attached_channels();
-        let zcan = retained_zcan.unwrap_or_else(can::zcan_attached_channels);
-        let _ = worker.send(WorkerEvent::HardwareScanned {
-            pcan,
-            zcan,
-            elapsed_ms: started.elapsed().as_millis(),
-        });
-    });
-    true
-}
-
-fn refresh_channel_window_lists(w: &ChannelConfigWindow, a: &App) {
-    w.set_channels(ModelRc::from(Rc::new(VecModel::from(chan_list_strings(a)))));
-    w.set_channel_details(ModelRc::from(Rc::new(VecModel::from(chan_detail_strings(
-        a,
-    )))));
-    let hardware = hardware_display_rows(
-        &a.pcan_devices,
-        &a.zcan_devices,
-        channel_configs(a),
-        a.lang_en,
-    );
-    w.set_pcan_hardware(ModelRc::from(Rc::new(VecModel::from(hardware.titles))));
-    w.set_pcan_hardware_details(ModelRc::from(Rc::new(VecModel::from(hardware.details))));
-    w.set_pcan_hardware_added(ModelRc::from(Rc::new(VecModel::from(hardware.added))));
-    w.set_pcan_hardware_group(ModelRc::from(Rc::new(VecModel::from(hardware.groups))));
-    w.set_pcan_hardware_source(ModelRc::from(Rc::new(VecModel::from(hardware.sources))));
-    w.set_pcan_hardware_enabled(ModelRc::from(Rc::new(VecModel::from(hardware.enabled))));
-    w.set_scan_in_progress(a.hardware_scan_in_progress);
-    w.set_scan_status(a.hardware_scan_status.clone().into());
-    w.set_connecting(a.channel_connect_pending);
-    w.set_config_dirty(a.channel_edit.as_ref().is_some_and(|session| session.dirty));
-}
-
-fn refresh_ui(a: &mut App, ui: &AppWindow, child_windows: Option<&ChildWindows>) {
-    ui.set_connected(a.connected);
-    ui.set_running(a.running);
-    ui.set_recording(a.recording);
-    ui.set_mode_trace(a.mode_trace);
-    ui.set_paused(a.paused);
-    ui.set_auto_scroll(a.autoscroll);
-    ui.set_rx_count(a.rx.to_string().into());
-    ui.set_tx_count(a.tx.to_string().into());
-    ui.set_err_count(a.err.to_string().into());
-    ui.set_capture_health(
-        format!(
-            "RX {}/{} H{} D{}  CMD {}/{} H{} R{}  REC {}/{} H{} D{}  HW O{} E{}  TS N{} J{:.0}/{:.0}us {:+.1}ppm M{}",
-            a.capture_queue_depth,
-            a.capture_queue_capacity,
-            a.capture_queue_high_watermark,
-            a.capture_dropped_frames,
-            a.command_queue_depth,
-            a.command_queue_capacity,
-            a.command_queue_high_watermark,
-            a.command_rejected,
-            a.recorder.queue_depth(),
-            a.recorder.queue_capacity(),
-            a.recorder.queue_high_watermark(),
-            a.recorder.dropped_frames(),
-            a.capture_hardware_overruns,
-            a.capture_hardware_errors,
-            a.timestamp_samples,
-            a.timestamp_latest_jitter_us,
-            a.timestamp_max_jitter_us,
-            a.timestamp_drift_ppm,
-            a.timestamp_monotonic_violations,
-        )
-        .into(),
-    );
-    ui.set_capture_loss(
-        a.capture_dropped_frames > 0
-            || a.capture_dropped_events > 0
-            || a.capture_hardware_overruns > 0
-            || a.capture_hardware_errors > 0
-            || a.command_rejected > 0
-            || a.timestamp_monotonic_violations > 0
-            || a.recorder.dropped_frames() > 0,
-    );
-    ui.set_fps(format!("{:.0}", a.fps).into());
-    ui.set_bus_load(format!("{:.1}%", a.bus_load).into());
-    ui.set_load_high(a.bus_load >= 70.0);
-
-    let chan_load = if a.chan_stats.len() >= 2 {
-        a.chan_stats
-            .iter()
-            .map(|(ch, cs)| format!("CAN{ch} {:.0}%", cs.bus_load))
-            .collect::<Vec<_>>()
-            .join("  ")
-    } else {
-        String::new()
-    };
-    ui.set_chan_load(chan_load.into());
-    ui.set_baud(a.baud.clone().into());
-    ui.set_total_count(a.trace.len().to_string().into());
-    let sel_id_txt = a
-        .selected_key
-        .map(|k| {
-            let id = (k & 0xFFFF_FFFF) as u32;
-            let ext = ((k >> 38) & 1) == 1;
-            let nm = a.dbc_message_name_frame(id, ext).unwrap_or("");
-            if nm.is_empty() {
-                format!("0x{id:X}")
-            } else {
-                format!("0x{id:X} {nm}")
-            }
-        })
-        .unwrap_or_else(|| "无".into());
-    ui.set_sel_id(sel_id_txt.into());
-
-    ui.set_selected(a.selected_index);
-
-    build_msg_table(a, ui);
-
-    build_signal_panel(a, ui);
-
-    let dbc_signal_sig = std::sync::Arc::as_ptr(&a.dbc_snap) as usize as u64;
-    if dbc_signal_sig != a.dbc_signal_cache {
-        a.dbc_signal_cache = dbc_signal_sig;
-        a.dbc_signal_choices.clear();
-        let mut dbc_signal_rows: Vec<SharedString> = Vec::new();
-        let mut choices: Vec<(u32, String, String, String)> = Vec::new();
-        let mut seen: std::collections::HashSet<(u32, String)> = std::collections::HashSet::new();
-        for d in &a.dbcs {
-            for m in d.messages() {
-                for s in &m.signals {
-                    if seen.insert((m.id, s.name.clone())) {
-                        choices.push((m.id, m.name.clone(), s.name.clone(), s.unit.clone()));
-                    }
-                }
-            }
-        }
-        choices.sort_by(|a, b| a.0.cmp(&b.0).then(a.2.cmp(&b.2)));
-        for (id, msg_name, sig_name, unit) in choices {
-            a.dbc_signal_choices.push((id, sig_name.clone()));
-            let unit_suffix = if unit.is_empty() {
-                String::new()
-            } else {
-                format!(" [{unit}]")
-            };
-            dbc_signal_rows.push(format!("0x{id:X} {msg_name} / {sig_name}{unit_suffix}").into());
-        }
-        if dbc_signal_rows.is_empty() {
-            dbc_signal_rows.push("(无 DBC 信号)".into());
-        }
-        sync_vec_model(&a.dbc_signal_model, dbc_signal_rows);
-    }
-    if let Some(windows) = child_windows {
-        refresh_signal_picker(a, &windows.signal);
-
-        refresh_chart(a, ui, &windows.chart);
-
-        {
-            let sig = tx_list_sig(a);
-            if sig != a.tx_list_cache {
-                a.tx_list_cache = sig;
-                push_tx_list(a, ui, &windows.tx);
-            }
-        }
-
-        let chan_names: Vec<SharedString> = a
-            .channels
-            .iter()
-            .map(|c| format!("CAN{}", c.sw_channel).into())
-            .collect();
-        {
-            use std::hash::{Hash, Hasher};
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            chan_names.hash(&mut h);
-            let sig = h.finish();
-            if sig != a.chan_names_cache {
-                a.chan_names_cache = sig;
-                windows
-                    .tx
-                    .set_channel_names(ModelRc::from(Rc::new(VecModel::from(chan_names))));
-            }
-        }
-
-        build_tx_dbc_page(a, &windows.tx);
-    }
-
-    build_stats(a, ui);
-
-    tree::build_tree(a, ui);
-
-    if a.console_cache != a.console.revision {
-        a.console_cache = a.console.revision;
-        let console_rows = a.console.rows().into_iter().map(Into::into).collect();
-        sync_vec_model(&a.console_model, console_rows);
-    }
-}
+mod ui_refresh;
+use ui_refresh::refresh_ui;
 
 pub(crate) fn sync_vec_model<T: Clone + 'static>(model: &VecModel<T>, rows: Vec<T>) {
     while model.row_count() > rows.len() {
@@ -4569,847 +2694,45 @@ pub(crate) fn fmtf(v: f64) -> String {
     }
 }
 
-fn publish_snapshot(a: &mut App) {
-    let last_rebuild = if a.last_dirty {
-        let mut last = HashMap::with_capacity(a.last.len());
-        for (k, li) in a.last.iter() {
-            last.insert(
-                *k,
-                ipc::LastSnap {
-                    t: li.t,
-                    count: li.count,
-                    data: li.data.clone(),
-                    ext: li.ext,
-                },
-            );
-        }
-        a.last_dirty = false;
-        Some(last)
-    } else {
-        None
-    };
-    if let Ok(mut snap) = a.ipc_snapshot.lock() {
-        snap.connected = a.connected;
-        snap.running = a.running;
-        snap.rx = a.rx;
-        snap.tx = a.tx;
-        snap.err = a.err;
-        snap.no_counter = a.no_counter;
-        snap.bus_load = a.bus_load;
-        snap.fps = a.fps;
-        snap.dropped_frames = a.capture_dropped_frames;
-        snap.dropped_events = a.capture_dropped_events;
-        snap.hardware_overruns = a.capture_hardware_overruns;
-        snap.hardware_errors = a.capture_hardware_errors;
-        snap.event_queue_depth = a.capture_queue_depth;
-        snap.event_queue_capacity = a.capture_queue_capacity;
-        snap.event_queue_high_watermark = a.capture_queue_high_watermark;
-        snap.command_rejected = a.command_rejected;
-        snap.command_queue_depth = a.command_queue_depth;
-        snap.command_queue_capacity = a.command_queue_capacity;
-        snap.command_queue_high_watermark = a.command_queue_high_watermark;
-        snap.timestamp_samples = a.timestamp_samples;
-        snap.timestamp_latest_jitter_us = a.timestamp_latest_jitter_us;
-        snap.timestamp_max_jitter_us = a.timestamp_max_jitter_us;
-        snap.timestamp_drift_ppm = a.timestamp_drift_ppm;
-        snap.timestamp_monotonic_violations = a.timestamp_monotonic_violations;
-        snap.last_log = a.logs.back().cloned().unwrap_or_default();
-        snap.recent_logs = a.logs.iter().rev().take(100).cloned().collect();
-        snap.recent_logs.reverse();
-        snap.channels = if a.connected {
-            let mut channels: Vec<u8> = a.connected_channels.iter().copied().collect();
-            channels.sort_unstable();
-            channels
-                .into_iter()
-                .map(|ch| {
-                    let cs = a.chan_stats.get(&ch).cloned().unwrap_or_default();
-                    ipc::ChanStatSnap {
-                        ch,
-                        rx: cs.rx,
-                        tx: cs.tx,
-                        err: cs.err,
-                        bus_load: cs.bus_load,
-                        fps: cs.fps,
-                    }
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
-        snap.console_enabled = a.console_enabled;
-        if a.console_enabled {
-            snap.console_text = a.console.export_text();
-        }
-        if let Some(last) = last_rebuild {
-            snap.last = last;
-        }
-        snap.dbc = a.dbc_snap.clone();
-    }
-}
+mod ipc_dispatch;
+use ipc_dispatch::*;
 
-fn rebuild_dbc_snap(a: &mut App) {
-    a.dbc_snap = std::sync::Arc::new(ipc::DbcSnapshot::from_dbcs(&a.dbcs));
+mod python_output;
+use python_output::*;
 
-    recompute_expr_ids(a);
-}
-
-fn stop_internal_periodic(a: &App, internal: u64) {
-    let dummy = CanFrame {
-        t: 0.0,
-        ch: 1,
-        tx: true,
-        id: 0,
-        ext: false,
-        fd: false,
-        brs: false,
-        remote: false,
-        error: false,
-        data: Vec::new(),
-    };
-    let _ = a.cmd.send(Cmd::SetPeriodic {
-        handle: internal,
-        frame: dummy,
-        period_ms: 1,
-        repeat: -1,
-        enable: false,
-    });
-}
-
-fn handle_ipc(a: &mut App, ureq: ipc::UiReq) {
-    use ipc::{IpcReq, IpcResp};
-    let cid = ureq.client_id;
-    let ok = || IpcResp::Ok(serde_json::json!({}));
-    let license_denied = || IpcResp::Err {
-        code: "LICENSE_REQUIRED".into(),
-        msg: "试用已结束，需要有效的 .pcanlic 授权".into(),
-    };
-
-    let mut periodic_rollback: Option<u64> = None;
-    let resp = match ureq.req {
-        IpcReq::Invalid { code, msg } => IpcResp::Err { code, msg },
-        IpcReq::SendOnce {
-            ch,
-            id,
-            data,
-            ext,
-            fd,
-            brs,
-            remote,
-        } => {
-            if !a.license_allows("can-transmit") {
-                license_denied()
-            } else {
-                match validate_ipc_tx_frame(ch, id, data, ext, fd, brs, remote) {
-                    Ok(frame) => match a.cmd.send(Cmd::SendOnce(frame)) {
-                        Ok(()) => ok(),
-                        Err(_) => IpcResp::Err {
-                            code: "BUSY".into(),
-                            msg: "CAN 命令队列已满，本帧未提交，请稍后重试".into(),
-                        },
-                    },
-                    Err(msg) => IpcResp::Err {
-                        code: "BAD_FRAME".into(),
-                        msg,
-                    },
-                }
-            }
-        }
-        IpcReq::SendBatch { frames, repeat } => {
-            if !a.license_allows("can-transmit") {
-                license_denied()
-            } else if frames.is_empty() {
-                IpcResp::Err {
-                    code: "BAD_ARG".into(),
-                    msg: "frames 不能为空".into(),
-                }
-            } else if repeat == 0 {
-                IpcResp::Err {
-                    code: "BAD_ARG".into(),
-                    msg: "repeat 必须大于 0".into(),
-                }
-            } else {
-                let total = (frames.len() as u64).saturating_mul(repeat as u64);
-                if total > 100_000 {
-                    IpcResp::Err {
-                        code: "BATCH_LIMIT".into(),
-                        msg: format!("批量发送共 {total} 帧，超过 100000 帧安全上限"),
-                    }
-                } else {
-                    let mut validated = Vec::with_capacity(frames.len());
-                    let mut error = None;
-                    for (index, frame) in frames.into_iter().enumerate() {
-                        match validate_ipc_tx_frame(
-                            frame.ch,
-                            frame.id,
-                            frame.data,
-                            frame.ext,
-                            frame.fd,
-                            frame.brs,
-                            frame.remote,
-                        ) {
-                            Ok(frame) => validated.push(frame),
-                            Err(message) => {
-                                error = Some(format!("frames[{index}]: {message}"));
-                                break;
-                            }
-                        }
-                    }
-                    if let Some(msg) = error {
-                        IpcResp::Err {
-                            code: "BAD_FRAME".into(),
-                            msg,
-                        }
-                    } else {
-                        let (ack_tx, ack_rx) = std::sync::mpsc::sync_channel(1);
-                        match a.cmd.send(Cmd::SendBatch {
-                            frames: validated,
-                            repeat,
-                            ack: Some(ack_tx),
-                        }) {
-                            Ok(()) => match ack_rx
-                                .recv_timeout(std::time::Duration::from_millis(500))
-                            {
-                                Ok(Ok(queued)) => {
-                                    IpcResp::Ok(serde_json::json!({ "queued": queued }))
-                                }
-                                Ok(Err(msg)) => IpcResp::Err {
-                                    code: "QUEUE_REJECTED".into(),
-                                    msg,
-                                },
-                                Err(_) => IpcResp::Err {
-                                    code: "TIMEOUT".into(),
-                                    msg: "CAN 后台未在 500ms 内确认批量任务，任务状态未知".into(),
-                                },
-                            },
-                            Err(_) => IpcResp::Err {
-                                code: "BUSY".into(),
-                                msg: "CAN 命令队列已满，批次未提交，请稍后重试".into(),
-                            },
-                        }
-                    }
-                }
-            }
-        }
-        IpcReq::SetPeriodic {
-            client_handle,
-            ch,
-            id,
-            data,
-            period_ms,
-            repeat,
-            ext,
-            fd,
-            brs,
-            remote,
-        } => {
-            if !a.license_allows("can-transmit") {
-                license_denied()
-            } else {
-                match validate_ipc_tx_frame(ch, id, data, ext, fd, brs, remote) {
-                    Err(msg) => IpcResp::Err {
-                        code: "BAD_FRAME".into(),
-                        msg,
-                    },
-                    Ok(frame) => {
-                        let internal = a.next_handle | (1u64 << 63);
-                        a.next_handle += 1;
-                        if let Some(old) = a.ipc_handle_map.insert((cid, client_handle), internal) {
-                            stop_internal_periodic(a, old);
-                        }
-                        match a.cmd.send(Cmd::SetPeriodic {
-                            handle: internal,
-                            frame,
-                            period_ms: period_ms.max(1),
-                            repeat,
-                            enable: true,
-                        }) {
-                            Ok(()) => {
-                                periodic_rollback = Some(internal);
-                                ok()
-                            }
-                            Err(_) => {
-                                a.ipc_handle_map.remove(&(cid, client_handle));
-                                IpcResp::Err {
-                                    code: "BUSY".into(),
-                                    msg: "CAN 命令队列已满，周期任务未提交，请稍后重试".into(),
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        IpcReq::StopPeriodic { client_handle } => {
-            if let Some(internal) = a.ipc_handle_map.remove(&(cid, client_handle)) {
-                stop_internal_periodic(a, internal);
-            }
-            ok()
-        }
-        IpcReq::Connect { channels } => {
-            if !a.license_allows("can-connect") {
-                license_denied()
-            } else if channels.is_empty() {
-                IpcResp::Err {
-                    code: "BAD_ARG".into(),
-                    msg: "channels 不能为空(至少给一个通道配置)".into(),
-                }
-            } else {
-                a.channels = channels.clone();
-                let _ = a.cmd.send(Cmd::ConnectChannels(channels));
-                ok()
-            }
-        }
-        IpcReq::ConnectConfigured => {
-            if !a.license_allows("can-connect") {
-                license_denied()
-            } else {
-                let _ = a.cmd.send(Cmd::ConnectChannels(a.channels.clone()));
-                let expected_channels: Vec<u8> = a
-                    .channels
-                    .iter()
-                    .map(|channel| channel.sw_channel.max(1))
-                    .collect();
-                IpcResp::Ok(serde_json::json!({
-                    "channels": a.channels.len(),
-                    "expected_channels": expected_channels,
-                }))
-            }
-        }
-        IpcReq::LoadDbc { path, loaded } => {
-            if a.dbc_paths.iter().any(|x| x == &path) {
-                IpcResp::Ok(serde_json::json!({ "loaded": false, "name": path, "note": "已加载" }))
-            } else {
-                match loaded {
-                    Ok(db) => {
-                        let name = db.file_name.clone();
-                        a.dbcs.push(db);
-                        a.dbc_paths.push(path.clone());
-                        rebuild_dbc_snap(a);
-                        a.log(format!("脚本加载 DBC: {name}"));
-                        IpcResp::Ok(serde_json::json!({ "loaded": true, "name": name }))
-                    }
-                    Err(e) => IpcResp::Err {
-                        code: "LOAD_FAIL".into(),
-                        msg: e,
-                    },
-                }
-            }
-        }
-        IpcReq::Disconnect => {
-            let _ = a.cmd.send(Cmd::Disconnect);
-            ok()
-        }
-        IpcReq::Start => {
-            if !a.license_allows("can-capture") {
-                license_denied()
-            } else {
-                let _ = a.cmd.send(Cmd::Start);
-                ok()
-            }
-        }
-        IpcReq::Stop => {
-            let _ = a.cmd.send(Cmd::Stop);
-            ok()
-        }
-        IpcReq::Log { msg } => {
-            a.log(msg);
-            ok()
-        }
-        IpcReq::RunResult { passed, summary } => {
-            a.run_status = format!("{} {summary}", if passed { "PASS" } else { "FAIL" });
-            let rs = a.run_status.clone();
-            a.log(format!("[脚本] {rs}"));
-            ok()
-        }
-        IpcReq::ConsoleSet {
-            enabled,
-            id,
-            ch,
-            clear,
-        } => {
-            if let Some(en) = enabled {
-                a.console_enabled = en;
-            }
-            if let Some(idv) = id {
-                a.console_id = if idv < 0 { None } else { Some(idv as u32) };
-            }
-            if let Some(c) = ch {
-                a.console_ch = c;
-            }
-            if clear {
-                a.console.clear();
-            }
-            ok()
-        }
-        IpcReq::ClientGone => {
-            let internals: Vec<u64> = a
-                .ipc_handle_map
-                .iter()
-                .filter(|((c, _), _)| *c == cid)
-                .map(|(_, h)| *h)
-                .collect();
-            for internal in internals {
-                stop_internal_periodic(a, internal);
-            }
-            a.ipc_handle_map.retain(|(c, _), _| *c != cid);
-            ok()
-        }
-    };
-
-    if ureq.reply.send(resp).is_err()
-        && let Some(internal) = periodic_rollback
-    {
-        stop_internal_periodic(a, internal);
-        a.ipc_handle_map.retain(|_, h| *h != internal);
-    }
-}
-
-fn validate_ipc_tx_frame(
-    ch: u8,
-    id: u32,
-    data: Vec<u8>,
-    ext: bool,
-    fd: bool,
-    brs: bool,
-    remote: bool,
-) -> Result<CanFrame, String> {
-    if ch == 0 {
-        return Err("CAN 通道必须从 1 开始".into());
-    }
-    let max_id = if ext { 0x1FFF_FFFF } else { 0x7FF };
-    if id > max_id {
-        return Err(format!(
-            "ID 0x{id:X} 超出{}帧范围 0x0..0x{max_id:X}",
-            if ext { "扩展" } else { "标准" }
-        ));
-    }
-    if brs && !fd {
-        return Err("BRS 只能用于 CAN FD 帧".into());
-    }
-    if remote && fd {
-        return Err("CAN FD 不支持远程帧".into());
-    }
-    if remote && !data.is_empty() {
-        return Err("远程帧不能携带数据字节".into());
-    }
-    if !fd && data.len() > 8 {
-        return Err(format!(
-            "经典 CAN 最多 8 字节，当前为 {} 字节；需要显式设置 fd=True",
-            data.len()
-        ));
-    }
-    if fd && !matches!(data.len(), 0..=8 | 12 | 16 | 20 | 24 | 32 | 48 | 64) {
-        return Err(format!(
-            "CAN FD 数据长度 {} 无法直接映射 DLC；允许 0..8、12、16、20、24、32、48、64 字节",
-            data.len()
-        ));
-    }
-    Ok(CanFrame {
-        t: 0.0,
-        ch,
-        tx: true,
-        id,
-        ext,
-        fd,
-        brs,
-        remote,
-        error: false,
-        data,
-    })
-}
-
-fn ipc_fanout(a: &App, f: &CanFrame) {
-    let subs = a.ipc_subs.subs.lock().unwrap();
-    if subs.is_empty() {
-        return;
-    }
-    let line = ipc::frame_event_json(f);
-    for s in subs.iter() {
-        if !s.ids.is_empty() && !s.ids.contains(&f.id) {
-            continue;
-        }
-        if s.out.try_send(line.clone()).is_err() {
-            s.dropped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        }
-    }
-}
-
-fn reap_child(a: &mut App) {
-    let timed_out = a
-        .py_started
-        .is_some_and(|t| t.elapsed() > std::time::Duration::from_secs(a.py_timeout_secs));
-    if (a.py_stop_flag || timed_out) && a.py_child.is_some() {
-        if let Some(mut c) = a.py_child.take() {
-            let _ = c.kill();
-        }
-        a.run_status = if timed_out {
-            "FAIL: 超时".into()
-        } else {
-            "已停止".into()
-        };
-        a.py_started = None;
-        a.py_stop_flag = false;
-        a.py_dirty = true;
-        return;
-    }
-    a.py_stop_flag = false;
-    if let Some(c) = a.py_child.as_mut()
-        && let Ok(Some(st)) = c.try_wait()
-    {
-        let success = st.success();
-        a.py_child = None;
-        a.py_started = None;
-
-        if !(a.run_status.starts_with("PASS") || a.run_status.starts_with("FAIL")) {
-            a.run_status = if success {
-                "PASS".into()
-            } else {
-                "FAIL".into()
-            };
-        }
-        a.py_dirty = true;
-    }
-}
-
-fn run_log_path() -> std::path::PathBuf {
-    std::env::temp_dir().join("pcanwork_last_run.log")
-}
-
-fn drain_py_output(a: &mut App) {
-    let mut lines = Vec::new();
-    if let Some(rx) = &a.py_out_rx {
-        let started = std::time::Instant::now();
-        for _ in 0..1024 {
-            let Ok(line) = rx.try_recv() else {
-                break;
-            };
-            lines.push(line);
-            if started.elapsed() >= std::time::Duration::from_millis(8) {
-                break;
-            }
-        }
-    }
-    let dropped = a
-        .py_output_dropped
-        .as_ref()
-        .map(|counter| counter.load(std::sync::atomic::Ordering::Relaxed))
-        .unwrap_or(0);
-    if dropped > a.py_output_dropped_seen {
-        let newly_dropped = dropped - a.py_output_dropped_seen;
-        lines.push(format!(
-            "[PcanWork] Python 输出队列已丢弃 {newly_dropped} 行（累计 {dropped}），测试结果日志不完整"
-        ));
-        a.py_output_dropped_seen = dropped;
-        if !a.run_status.starts_with("FAIL") {
-            a.run_status = "FAIL: Python 输出队列溢出".into();
-        }
-    }
-    if lines.is_empty() {
-        return;
-    }
-    for line in lines {
-        a.py_output.push_str(&line);
-        a.py_output.push('\n');
-        a.log(line);
-    }
-
-    const CAP: usize = 200_000;
-    if a.py_output.len() > CAP {
-        let mut cut = a.py_output.len() - CAP;
-        while cut < a.py_output.len() && !a.py_output.is_char_boundary(cut) {
-            cut += 1;
-        }
-        a.py_output = a.py_output[cut..].to_string();
-    }
-    a.py_dirty = true;
-}
-
-fn gather_settings(a: &App, ui: &AppWindow) -> settings::Settings {
-    let th = ui.global::<Theme>();
-    settings::Settings {
-        channels: a.channels.clone(),
-        channel_sel: a.channel_sel,
-        dark: th.get_dark(),
-        big: th.get_big(),
-        trace_cap: a.trace_cap,
-        chart_cap: a.chart_cap,
-        f_id: ui.get_f_id().to_string(),
-        f_name: ui.get_f_name().to_string(),
-        f_data: ui.get_f_data().to_string(),
-        dir_filter: ui.get_dir_filter(),
-        dbc_path: None,
-        dbc_paths: a.dbc_paths.clone(),
-        left_w: ui.get_left_w(),
-        bottom_h: ui.get_bottom_h(),
-        mode_trace: a.mode_trace,
-        time_mode: a.time_mode,
-        cols_hidden: {
-            let mut v: Vec<&str> = a.cols_hidden.iter().map(|s| s.as_str()).collect();
-            v.sort_unstable();
-            v.join(",")
-        },
-        sim_widgets: serde_json::to_string(&a.sim_widgets).unwrap_or_default(),
-        lang_en: ui.global::<I18n>().get_en(),
-        python_interpreter_path: a.python_interpreter.clone(),
-        last_script_path: a.last_script_path.clone(),
-        expr_vars: a.expr_vars.clone(),
-        console_enabled: a.console_enabled,
-        console_id: a.console_id.map(|x| x as i64).unwrap_or(-1),
-        console_ch: a.console_ch as i32,
-        renderer: ui.get_renderer_mode().to_string(),
-        recent_project_paths: a.recent_project_paths.clone(),
-    }
-}
-
-fn persist_settings(a: &mut App, ui: &AppWindow) {
-    let result = settings::save(&gather_settings(a, ui));
-    if let Err(error) = result {
-        a.log(format!("保存最近工程失败: {error}"));
-    }
-}
-
-fn persist_project_if_open(a: &mut App, ui: &AppWindow) {
-    persist_settings(a, ui);
-    let Some(path) = a.project_path.clone() else {
-        return;
-    };
-    let project = Project {
-        name: a.project_name.clone(),
-        settings: gather_settings(a, ui),
-        txs: a.txs.iter().map(TxTaskDto::from_task).collect(),
-    };
-    let worker = a.worker_tx.clone();
-    let sim_revision = a.sim_revision;
-    std::thread::spawn(move || {
-        let result = serde_json::to_string_pretty(&project)
-            .map_err(|error| format!("序列化工程失败: {error}"))
-            .and_then(|text| {
-                std::fs::write(&path, text).map_err(|error| format!("保存工程失败: {error}"))
-            });
-        let _ = worker.send(WorkerEvent::ProjectSaved {
-            path,
-            sim_revision,
-            result,
-        });
-    });
-}
-
-fn commit_channel_edit(a: &mut App) -> Result<usize, String> {
-    ensure_channel_edit_session(a);
-    let session = a.channel_edit.as_ref().expect("channel edit session");
-    can::validate_channel_set(&session.channels)?;
-    a.channels = session.channels.clone();
-    a.channel_sel = session
-        .selected
-        .clamp(0, a.channels.len() as i32 - 1)
-        .max(0);
-    if let Some(first) = a.channels.first().cloned() {
-        a.baud = first.baud.clone();
-        a.device_cfg = first;
-    }
-    if let Some(session) = a.channel_edit.as_mut() {
-        session.channels = a.channels.clone();
-        session.selected = a.channel_sel;
-        session.dirty = false;
-    }
-    Ok(a.channels.len())
-}
-
-fn touch_recent_project(a: &mut App, path: &std::path::Path) {
-    let path = path.to_string_lossy().to_string();
-    a.recent_project_paths
-        .retain(|item| !item.eq_ignore_ascii_case(&path));
-    a.recent_project_paths.insert(0, path);
-    a.recent_project_paths.truncate(12);
-}
-
-fn refresh_recent_projects(a: &App) {
-    let rows = a
-        .recent_project_paths
-        .iter()
-        .map(|path| {
-            let file = std::path::Path::new(path);
-            let available = file.is_file();
-            let name = file
-                .file_stem()
-                .and_then(|value| value.to_str())
-                .unwrap_or(path);
-            let modified = std::fs::metadata(file)
-                .ok()
-                .and_then(|metadata| metadata.modified().ok())
-                .map(|time| {
-                    chrono::DateTime::<chrono::Local>::from(time)
-                        .format("%Y-%m-%d %H:%M")
-                        .to_string()
-                })
-                .unwrap_or_default();
-            RecentProjectRow {
-                name: name.into(),
-                path: path.as_str().into(),
-                modified: modified.into(),
-                available,
-            }
-        })
-        .collect::<Vec<_>>();
-    sync_vec_model(&a.recent_project_model, rows);
-}
-
-fn apply_settings(a: &mut App, ui: &AppWindow, s: &settings::Settings) {
-    if !s.channels.is_empty() {
-        a.channels = s.channels.clone();
-        a.channel_sel = s.channel_sel.clamp(0, a.channels.len() as i32 - 1).max(0);
-    }
-    a.python_interpreter = s.python_interpreter_path.clone();
-    a.last_script_path = s.last_script_path.clone();
-    a.expr_vars = s.expr_vars.clone();
-    let rmode = if s.renderer.is_empty() {
-        "auto".to_string()
-    } else {
-        s.renderer.clone()
-    };
-    ui.set_renderer_mode(rmode.into());
-    recompute_expr_ids(a);
-
-    a.console_enabled = s.console_enabled;
-    a.console_id = if s.console_id < 0 {
-        None
-    } else {
-        Some(s.console_id as u32)
-    };
-    a.console_ch = s.console_ch.clamp(0, 255) as u8;
-    ui.set_console_enabled(a.console_enabled);
-    ui.set_console_id(
-        a.console_id
-            .map(|x| format!("0x{x:X}"))
-            .unwrap_or_default()
-            .into(),
-    );
-    ui.set_console_ch(a.console_ch as i32);
-    a.mode_trace = s.mode_trace;
-    a.time_mode = s.time_mode;
-    ui.set_time_mode(s.time_mode);
-    a.cols_hidden = s
-        .cols_hidden
-        .split(',')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .collect();
-    apply_col_widths(ui, &a.cols_hidden);
-    a.sim_tx_frames.clear();
-    if !s.sim_widgets.trim().is_empty() {
-        a.sim_widgets = serde_json::from_str(&s.sim_widgets).unwrap_or_default();
-    }
-    if s.trace_cap >= 1000 {
-        a.trace_cap = s.trace_cap;
-    }
-    if s.chart_cap >= 500 {
-        a.chart_cap = s.chart_cap;
-    }
-
-    let effective: Vec<String> = if !s.dbc_paths.is_empty() {
-        s.dbc_paths.clone()
-    } else {
-        s.dbc_path.clone().into_iter().collect()
-    };
-    if !effective.is_empty() {
-        a.dbcs.clear();
-        a.dbc_paths.clear();
-        a.expanded_signal_cache.clear();
-        for dp in effective {
-            match DbcDb::load(&dp) {
-                Ok(db) => {
-                    a.log(format!("加载 DBC: {}", db.file_name));
-                    a.dbcs.push(db);
-                    a.dbc_paths.push(dp);
-                }
-                Err(e) => a.log(format!("加载 DBC 失败 {dp}: {e}")),
-            }
-        }
-        rebuild_dbc_snap(a);
-    }
-    a.filter = parse_filter(&s.f_id, &s.f_name, &s.f_data);
-    a.filter.dir_filter = dir_idx_to_opt(s.dir_filter);
-    ui.set_mode_trace(s.mode_trace);
-    ui.set_f_id(s.f_id.clone().into());
-    ui.set_f_name(s.f_name.clone().into());
-    ui.set_f_data(s.f_data.clone().into());
-    ui.set_dir_filter(s.dir_filter);
-    if s.left_w > 80.0 {
-        ui.set_left_w(s.left_w);
-    }
-    if s.bottom_h > 60.0 {
-        ui.set_bottom_h(s.bottom_h);
-    }
-    refresh_and_reconcile_pcan(a);
-}
-
-fn dir_idx_to_opt(idx: i32) -> Option<bool> {
-    match idx {
-        1 => Some(false),
-        2 => Some(true),
-        _ => None,
-    }
-}
-
-fn parse_filter(id_s: &str, name_s: &str, data_s: &str) -> Filter {
-    let mut f = Filter::default();
-
-    for tok in id_s.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
-        if let Some(rest) = tok.strip_prefix('!') {
-            if let Some(v) = parse_u32(rest) {
-                f.deny.push(v);
-            }
-        } else if let Some((a, b)) = tok.split_once('-') {
-            if let (Some(a), Some(b)) = (parse_u32(a.trim()), parse_u32(b.trim())) {
-                f.allow.push((a.min(b), a.max(b)));
-            }
-        } else if let Some(v) = parse_u32(tok) {
-            f.allow.push((v, v));
-        }
-    }
-
-    let n = name_s.trim();
-    if !n.is_empty() {
-        if let Some(rest) = n.strip_prefix('!') {
-            f.name = Some(rest.to_string());
-            f.name_exclude = true;
-        } else if let Some(rest) = n.strip_suffix('*') {
-            f.name = Some(rest.to_string());
-            f.name_prefix = true;
-        } else if let Some(rest) = n.strip_prefix('*') {
-            f.name = Some(rest.to_string());
-            f.name_suffix = true;
-        } else {
-            f.name = Some(n.to_string());
-        }
-    }
-
-    let d = data_s.trim();
-    if !d.is_empty() {
-        let bytes: Vec<u8> = d
-            .split_whitespace()
-            .filter_map(|x| u8::from_str_radix(x.trim_start_matches("0x"), 16).ok())
-            .collect();
-        if !bytes.is_empty() {
-            f.data = Some(bytes);
-        }
-    }
-    f
-}
-
-fn parse_u32(s: &str) -> Option<u32> {
-    let s = s.trim();
-    if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        u32::from_str_radix(h, 16).ok()
-    } else {
-        u32::from_str_radix(s, 16).ok()
-    }
-}
+mod project_state;
+use project_state::*;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn playback_loop_detects_time_rollback_but_not_equal_timestamps() {
+        assert!(playback_time_restarted(Some(9477.6), 0.0));
+        assert!(!playback_time_restarted(Some(1.0), 1.0));
+        assert!(!playback_time_restarted(Some(1.0), 1.1));
+        assert!(!playback_time_restarted(None, 0.0));
+    }
+
+    #[test]
+    fn playback_retains_the_complete_loaded_time_series() {
+        assert_eq!(chart_sample_cap(10_000, false, 283_503), 10_000);
+        assert_eq!(chart_sample_cap(10_000, true, 283_503), 283_503);
+        assert_eq!(chart_sample_cap(20_000, true, 1_000), 20_000);
+    }
+
+    #[test]
+    fn child_windows_are_centered_inside_the_primary_work_area() {
+        assert_eq!(
+            centered_window_position((0, 0, 1920, 1040), (980, 500)),
+            (470, 270)
+        );
+        assert_eq!(
+            centered_window_position((0, 0, 1280, 720), (1600, 900)),
+            (0, 0)
+        );
+    }
 
     #[test]
     fn ipc_frame_validation_blocks_ambiguous_or_invalid_frames() {

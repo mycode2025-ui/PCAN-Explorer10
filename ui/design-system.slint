@@ -1,4 +1,4 @@
-import { Palette } from "std-widgets.slint";
+import { Palette, ScrollView } from "std-widgets.slint";
 
 // PcanWork product design system shared by CAN, Modbus and Serial tools.
 // Keep application-specific components local; colors, typography, spacing,
@@ -14,6 +14,17 @@ export global ProductI18n {
 export global ProductDesign {
     in-out property <bool> dark: false;
     in-out property <bool> compact: false;
+    // Logical pixels: DPI scaling is handled by Slint, not multiplied again here.
+    out property <length> compact-breakpoint: 1100px;
+    out property <length> sidebar-min: 260px;
+    out property <length> sidebar-preferred: 300px;
+    out property <length> form-label-width: 64px;
+    public pure function page-gap(available: length) -> length {
+        return available < compact-breakpoint ? space-2 : space-3;
+    }
+    public pure function sidebar-width(available: length) -> length {
+        return min(sidebar-preferred, max(sidebar-min, available * 0.25));
+    }
 
     // Brand and semantic colors.
     out property <color> window: dark ? #0d1726 : #eef3f9;
@@ -27,6 +38,7 @@ export global ProductDesign {
     out property <color> brand-soft: dark ? #1e3556 : #dbe7f6;
     out property <color> brand-header: dark ? #16273d : #1c5aa6;
     out property <color> on-brand: #ffffff;
+    out property <color> on-button-accent: dark ? #0d1726 : #ffffff;
     out property <color> on-brand-muted: #ffffffcc;
     out property <color> on-brand-strong: #ffffffaa;
     out property <color> on-brand-subtle: #ffffff66;
@@ -79,6 +91,134 @@ export global ProductDesign {
     out property <length> radius-sm: 6px;
     out property <length> radius-md: 10px;
     out property <length> focus-width: 2px;
+    out property <length> form-control-height: compact ? 28px : 32px;
+    out property <length> body-font-size: compact ? font-sm : font-md;
+    out property <length> caption-font-size: compact ? font-xs : font-sm;
+    out property <length> dialog-padding: 16px;
+    out property <length> dialog-radius: 8px;
+}
+
+// One activation gate for mouse, keyboard and accessibility actions.
+export component ProductButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    in property <bool> primary: false;
+    in property <bool> active: false;
+    in property <bool> danger: false;
+    in property <bool> boxed: true;
+    in property <length> h: ProductDesign.control-height;
+    in property <length> fs: ProductDesign.body-font-size;
+    out property <length> natural-width: root.text == "×" ? 34px : label.preferred-width + 22px;
+    // Reuse the component's single pointer surface for hover-dependent affordances
+    // (for example toolbar tooltips). Consumers must not add another overlapping
+    // TouchArea, otherwise one physical click can be delivered twice.
+    out property <bool> hovered: touch.has-hover;
+    callback clicked;
+    public function activate() { if root.enabled { root.clicked(); } }
+    preferred-width: root.natural-width;
+    min-width: 24px;
+    height: root.h;
+    horizontal-stretch: 0;
+    border-radius: ProductDesign.radius-sm;
+    private property <color> accent: root.danger ? ProductDesign.danger : ProductDesign.brand;
+    background: !root.enabled ? ProductDesign.surface-raised
+        : touch.pressed ? ((root.primary || root.active) ? root.accent.darker(0.18) : ProductDesign.selection)
+        : (root.primary || root.active) ? root.accent
+        : touch.has-hover ? ProductDesign.brand-soft
+        : root.boxed ? ProductDesign.surface : transparent;
+    border-width: keys.has-focus ? ProductDesign.focus-width : 1px;
+    border-color: keys.has-focus ? ProductDesign.warning
+        : !root.enabled ? ProductDesign.border
+        : (root.primary || root.active) ? root.accent
+        : root.boxed || touch.has-hover ? ProductDesign.border : transparent;
+    animate background { duration: 140ms; }
+    accessible-role: AccessibleRole.button;
+    accessible-label: root.text == "×" ? ProductI18n.t("关闭", "Close") : root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { root.activate(); }
+    forward-focus: keys;
+    label := Text {
+        text: root.text; visible: root.text != "×";
+        width: 100%; height: 100%; overflow: elide;
+        horizontal-alignment: center; vertical-alignment: center;
+        font-family: ProductDesign.font-sans; font-size: root.fs;
+        color: !root.enabled ? ProductDesign.text-muted
+            : (root.primary || root.active) ? ProductDesign.on-button-accent
+            : root.danger ? ProductDesign.danger : ProductDesign.text;
+    }
+    if root.text == "×": Image {
+        source: @image-url("icons/close.svg"); width: 16px; height: 16px;
+        x: (parent.width - self.width)/2; y: (parent.height - self.height)/2;
+        colorize: root.enabled ? ProductDesign.text : ProductDesign.text-muted;
+    }
+    touch := TouchArea {
+        enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.activate(); }
+    }
+    keys := FocusScope {
+        width: 0px; height: 0px; enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.activate(); return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+// A real popup owns Tab traversal and restores the opener's focus on close.
+export component ProductModal inherits Rectangle {
+    in property <bool> open: false;
+    callback close-requested;
+    background: transparent;
+    changed open => { if root.open { modal.show(); } else { modal.close(); } }
+    init => { if root.open { modal.show(); } }
+    modal := PopupWindow {
+        x: 0px; y: 0px;
+        width: root.width; height: root.height;
+        close-policy: no-auto-close;
+        Rectangle {
+            background: ProductDesign.scrim;
+            FocusScope {
+                focus-on-tab-navigation: false;
+                key-pressed(event) => {
+                    if event.text == Key.Escape { root.close-requested(); return accept; }
+                    return reject;
+                }
+                @children
+            }
+        }
+    }
+}
+
+// Keep the preferred form size inside a bounded, scrollable viewport.
+export component ProductDialogSurface inherits Rectangle {
+    in property <length> dialog-width: 480px;
+    in property <length> dialog-height: 400px;
+    in property <length> available-width;
+    in property <length> available-height;
+    width: min(root.dialog-width, root.available-width - 32px);
+    height: min(root.dialog-height, root.available-height - 32px);
+    x: (root.available-width - self.width) / 2;
+    y: (root.available-height - self.height) / 2;
+    background: ProductDesign.surface;
+    border-radius: ProductDesign.dialog-radius;
+    border-width: 1px; border-color: ProductDesign.border;
+    ScrollView {
+        x: 1px; y: 1px; width: parent.width - 2px; height: parent.height - 2px;
+        viewport-width: self.width;
+        viewport-height: max(self.height, root.dialog-height - 2px);
+        Rectangle {
+            width: parent.width; height: parent.height;
+            @children
+        }
+    }
+}
+
+export component ProductDensitySwitch inherits ProductButton {
+    width: 64px; h: ProductDesign.toolbar-control-height; fs: ProductDesign.font-sm;
+    text: ProductDesign.compact ? ProductI18n.t("舒适", "Roomy") : ProductI18n.t("紧凑", "Dense");
+    clicked => { ProductDesign.compact = !ProductDesign.compact; }
 }
 
 export component ProductLanguageSwitch inherits Rectangle {

@@ -1,15 +1,79 @@
 // One-window Slint page split from the original monolithic file.
-import { Button, ComboBox, LineEdit, CheckBox, TabWidget, ListView, ScrollView, VerticalBox, HorizontalBox, TextEdit } from "std-widgets.slint";
+import { ListView } from "std-widgets.slint";
 import { ByteCell, SimRow, MsgRow, SigRow, TxSigRow, TxRow, PbFileRow, TreeRow, ChanStat, IdStat, ChartSeries, DbcSignalRow, SignalPickRow, I18n, Theme, ColW, Cell, HCell, SortHeader, TBtn, Icon, RibbonBtn, RibbonGroup, RibbonTab, ConvTab, SimGlyph, ThemedWindow } from "common.slint";
 
+component ChartToolButton inherits TBtn {
+    in property <string> label;
+    in property <string> icon-name;
+    in property <bool> compact: false;
+    text: compact ? "" : (icon-name == "" ? label : "   " + label);
+    accessible-label: label;
+    // 44x40 -> 33x30: the control footprint is reduced by exactly one quarter.
+    // Keep a 24px glyph so the symbol itself remains prominent and readable.
+    h: 30px;
+    width: compact ? 33px : root.natural-width;
+    Icon {
+        visible: root.icon-name != "";
+        name: root.icon-name;
+        width: 24px; height: 24px;
+        x: root.compact ? (parent.width - self.width) / 2 : 6px;
+        y: (parent.height - self.height) / 2;
+        clr: root.active ? Theme.on-accent : Theme.text;
+    }
+    tip := Rectangle {
+        visible: root.hovered;
+        z: 1000;
+        x: (root.width - self.width) / 2;
+        y: root.height + 3px;
+        width: tip-label.preferred-width + 14px;
+        height: 24px;
+        border-radius: 3px;
+        border-width: 1px;
+        border-color: Theme.border;
+        background: Theme.text;
+        tip-label := Text {
+            text: root.label;
+            color: Theme.panel;
+            font-size: 11px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component ChartHorizontalGridLine inherits Rectangle {
+    in property <brush> line-color;
+    height: 1px;
+    background: transparent;
+    for dash in 160: Rectangle {
+        x: dash * 16px;
+        width: 8px;
+        height: 1px;
+        background: root.line-color;
+    }
+}
+
+component ChartVerticalGridLine inherits Rectangle {
+    in property <brush> line-color;
+    width: 1px;
+    background: transparent;
+    for dash in 160: Rectangle {
+        y: dash * 16px;
+        width: 1px;
+        height: 8px;
+        background: root.line-color;
+    }
+}
+
 export component ChartWindow inherits ThemedWindow {
-    title: I18n.en ? "PcanWork - Chart Window" : "PcanWork - 独立曲线窗口";
+    title: I18n.en ? "PcanWork - Independent Chart Window" : "PcanWork - 独立曲线窗口";
     icon: @image-url("logo.svg");
     preferred-width: 1280px;
     preferred-height: 820px;
     min-width: 900px;
     min-height: 560px;
     background: Theme.bg;
+    private property <length> toolbar-height: 38px;
 
     in property <[ChartSeries]> series;
     in property <string> chart-xstart-label;
@@ -19,11 +83,21 @@ export component ChartWindow inherits ThemedWindow {
     in property <bool> chart-paused: false;
     in property <bool> chart-cursor: false;
     in property <int> chart-time-mode: 0;
+    in-out property <int> chart-y-mode: 0;
+    in-out property <bool> chart-grid: true;
+    in-out property <bool> chart-points: false;
+    in-out property <bool> signal-panel-visible: true;
     in-out property <float> cursor-frac;
     // 双游标：开启后显示第二条游标线(cursor-frac2)，并在读数里给出两游标的时间差/值差
     in property <bool> chart-dual: false;
     in-out property <float> cursor-frac2: 0.5;
     property <int> drag-target: 1; // 双游标拖动时当前抓住的游标(1/2)
+    // 0: 游标/查看，1: 平移，2: 框选放大。三种交互互斥，避免一次拖动触发多种行为。
+    in-out property <int> chart-interaction-mode: 0;
+    property <bool> selection-active: false;
+    property <float> selection-start-frac: 0;
+    property <float> selection-end-frac: 0;
+    property <float> pan-last-frac: 0;
     // 绘图区宽高比：由 Rust 根据上报的 plot 像素宽高算出并写回，Path viewbox 读它(纯值,无布局依赖)。
     in-out property <float> chart-aspect: 4.0;
     // plot 像素宽高，仅由 Rust 读取(Slint 布局不读这两个属性，故在 changed 里写不会引起布局递归)。
@@ -32,7 +106,6 @@ export component ChartWindow inherits ThemedWindow {
     // 每条曲线行高(px)：由 Rust 算 max(最小高, 区域高/可见数)，信号少则等分填满、多则按最小高并滚动。
     in-out property <float> row-h: 120;
 
-    in property <bool> chart-sig-logging: false;
     in-out property <bool> chart-topmost: false;   // 窗口置顶(显示最前)
     callback chart-topmost-toggle(bool);
     callback chart-toggle-pause();
@@ -40,24 +113,28 @@ export component ChartWindow inherits ThemedWindow {
     callback chart-cursor-toggle();
     callback chart-dual-toggle();
     callback chart-cursor-move();
-    callback chart-export-csv();
-    callback chart-export-wide-csv();
-    callback chart-sig-log-toggle();
     callback open-signal-selector();
     callback chart-toggle-series(int);
     callback chart-remove-series(int);
     callback chart-zoom(float, float);
+    callback chart-pan(float);
+    callback chart-zoom-selection(float, float);
     callback chart-fit();
     callback chart-set-time-mode(int);
+    callback chart-set-y-mode(int);
+    callback chart-grid-toggle(bool);
+    callback chart-points-toggle(bool);
 
     HorizontalLayout {
         Rectangle {
-            width: 260px; background: Theme.panel;
+            visible: root.signal-panel-visible;
+            width: root.signal-panel-visible ? 260px : 0px;
+            background: Theme.panel;
             Rectangle { width: 1px; height: 100%; x: parent.width - 1px; background: Theme.border; }
             VerticalLayout {
                 // 第一行：选择信号
                 Rectangle {
-                    height: Theme.ctrl-h + 8px; background: Theme.panel2;
+                    height: root.toolbar-height; background: Theme.panel2;
                     Rectangle { width: 100%; height: 1px; y: parent.height - 1px; background: Theme.border; }
                     HorizontalLayout {
                         padding: 4px; spacing: 6px; alignment: start;
@@ -103,28 +180,34 @@ export component ChartWindow inherits ThemedWindow {
 
         VerticalLayout {
             Rectangle {
-                height: Theme.ctrl-h + 8px; background: Theme.panel2;
+                height: root.toolbar-height; background: Theme.panel2;
                 Rectangle { width: 100%; height: 1px; y: parent.height - 1px; background: Theme.border; }
                 HorizontalLayout {
                     padding: 4px; spacing: 3px; alignment: start;
-                    TBtn { text: root.chart-paused ? (I18n.en ? "Resume" : "继续") : (I18n.en ? "Pause" : "暂停"); active: root.chart-paused; clicked => { root.chart-toggle-pause(); } }
-                    TBtn { text: I18n.en ? "Clear" : "清空"; clicked => { root.clear-chart(); } }
-                    TBtn { text: I18n.en ? "Cursor" : "游标"; active: root.chart-cursor; clicked => { root.chart-cursor-toggle(); } }
-                    TBtn { text: I18n.en ? "Dual Cursor" : "双游标"; active: root.chart-dual; clicked => { root.chart-dual-toggle(); } }
+                    ChartToolButton { boxed: true; compact: true; icon-name: "pin"; label: root.chart-topmost ? (I18n.en ? "Top: ON" : "置顶: 开") : (I18n.en ? "Top" : "置顶"); active: root.chart-topmost; clicked => { root.chart-topmost = !root.chart-topmost; root.chart-topmost-toggle(root.chart-topmost); } }
+                    ChartToolButton { compact: true; icon-name: "layout"; label: root.signal-panel-visible ? (I18n.en ? "Hide Signal Panel" : "隐藏信号面板") : (I18n.en ? "Show Signal Panel" : "显示信号面板"); active: root.signal-panel-visible; clicked => { root.signal-panel-visible = !root.signal-panel-visible; } }
                     Rectangle { width: 1px; background: Theme.border; }
-                    Text { text: I18n.en ? "Time axis:" : "Time axis:"; vertical-alignment: center; font-size: 11px; color: Theme.text-dim; }
-                    TBtn { text: "Rel"; active: root.chart-time-mode == 0; clicked => { root.chart-set-time-mode(0); } }
-                    TBtn { text: "Actual"; active: root.chart-time-mode == 1; clicked => { root.chart-set-time-mode(1); } }
-                    TBtn { text: I18n.en ? "Zoom+" : "放大"; clicked => { root.chart-zoom(-1, 0.5); } }
-                    TBtn { text: I18n.en ? "Zoom-" : "缩小"; clicked => { root.chart-zoom(1, 0.5); } }
-                    TBtn { text: I18n.en ? "Fit" : "适应"; clicked => { root.chart-fit(); } }
+                    ChartToolButton { compact: true; icon-name: root.chart-paused ? "start" : "pause"; label: root.chart-paused ? (I18n.en ? "Resume" : "继续") : (I18n.en ? "Pause" : "暂停"); active: root.chart-paused; clicked => { root.chart-toggle-pause(); } }
+                    ChartToolButton { compact: true; icon-name: "clear"; label: I18n.en ? "Clear Data" : "清空数据"; clicked => { root.clear-chart(); } }
                     Rectangle { width: 1px; background: Theme.border; }
-                    TBtn { text: I18n.en ? "Export CSV" : "导出CSV"; clicked => { root.chart-export-csv(); } }
-                    TBtn { text: I18n.en ? "Export Wide" : "导出宽表"; clicked => { root.chart-export-wide-csv(); } }
-                    TBtn { text: root.chart-sig-logging ? (I18n.en ? "Stop log" : "停止记录") : (I18n.en ? "Sig log" : "信号记录"); active: root.chart-sig-logging; clicked => { root.chart-sig-log-toggle(); } }
-                    TBtn { boxed: true; text: root.chart-topmost ? (I18n.en ? "Top: ON" : "置顶: 开") : (I18n.en ? "Top" : "置顶"); active: root.chart-topmost; clicked => { root.chart-topmost = !root.chart-topmost; root.chart-topmost-toggle(root.chart-topmost); } }
+                    ChartToolButton { compact: true; icon-name: "cursor"; label: I18n.en ? "Cursor" : "游标"; active: root.chart-interaction-mode == 0 && root.chart-cursor; clicked => { if root.chart-interaction-mode != 0 { root.chart-interaction-mode = 0; if !root.chart-cursor { root.chart-cursor-toggle(); } } else { root.chart-cursor-toggle(); } } }
+                    ChartToolButton { compact: true; icon-name: "dual-cursor"; label: I18n.en ? "Dual Cursor" : "双游标"; active: root.chart-interaction-mode == 0 && root.chart-dual; clicked => { root.chart-interaction-mode = 0; root.chart-dual-toggle(); } }
+                    Rectangle { width: 1px; background: Theme.border; }
+                    ChartToolButton { compact: true; icon-name: "time-relative"; label: I18n.en ? "Relative Time" : "相对时间"; active: root.chart-time-mode == 0; clicked => { root.chart-set-time-mode(0); } }
+                    ChartToolButton { compact: true; icon-name: "time-actual"; label: I18n.en ? "Absolute Time" : "实际时间"; active: root.chart-time-mode == 1; clicked => { root.chart-set-time-mode(1); } }
+                    Rectangle { width: 1px; background: Theme.border; }
+                    ChartToolButton { compact: true; icon-name: "zoom-in"; label: I18n.en ? "Zoom in around center" : "以中心放大"; clicked => { root.chart-zoom(-1, 0.5); } }
+                    ChartToolButton { compact: true; icon-name: "zoom-out"; label: I18n.en ? "Zoom out around center" : "以中心缩小"; clicked => { root.chart-zoom(1, 0.5); } }
+                    ChartToolButton { compact: true; icon-name: "zoom-box"; label: I18n.en ? "Box zoom: drag a time range" : "框选放大：拖出时间范围"; active: root.chart-interaction-mode == 2; clicked => { root.chart-interaction-mode = root.chart-interaction-mode == 2 ? 0 : 2; root.selection-active = false; } }
+                    ChartToolButton { compact: true; icon-name: "pan"; label: I18n.en ? "Pan: hold and drag horizontally" : "平移：按住并水平拖动"; active: root.chart-interaction-mode == 1; clicked => { root.chart-interaction-mode = root.chart-interaction-mode == 1 ? 0 : 1; root.selection-active = false; } }
+                    ChartToolButton { compact: true; icon-name: "fit"; label: I18n.en ? "Fit all data (or double-click plot)" : "适应全部数据（也可双击绘图区）"; clicked => { root.chart-fit(); } }
+                    ChartToolButton { compact: true; icon-name: "grid"; label: root.chart-grid ? (I18n.en ? "Hide Grid" : "隐藏网格") : (I18n.en ? "Show Grid" : "显示网格"); active: root.chart-grid; clicked => { root.chart-grid = !root.chart-grid; root.chart-grid-toggle(root.chart-grid); } }
+                    ChartToolButton { compact: true; icon-name: "record"; label: root.chart-points ? (I18n.en ? "Hide Data Points" : "隐藏数据点") : (I18n.en ? "Show Data Points" : "显示数据点"); active: root.chart-points; clicked => { root.chart-points = !root.chart-points; root.chart-points-toggle(root.chart-points); } }
+                    Rectangle { width: 1px; background: Theme.border; }
+                    ChartToolButton { compact: true; icon-name: "y-independent"; label: I18n.en ? "Independent Y Axes" : "独立 Y 轴"; active: root.chart-y-mode == 0; clicked => { root.chart-y-mode = 0; root.chart-set-y-mode(0); } }
+                    ChartToolButton { compact: true; icon-name: "y-shared"; label: I18n.en ? "Shared Y Axis" : "共享 Y 轴"; active: root.chart-y-mode == 1; clicked => { root.chart-y-mode = 1; root.chart-set-y-mode(1); } }
+                    ChartToolButton { compact: true; icon-name: "y-normalized"; label: I18n.en ? "Normalized Y Axes" : "归一化 Y 轴"; active: root.chart-y-mode == 2; clicked => { root.chart-y-mode = 2; root.chart-set-y-mode(2); } }
                     Rectangle { horizontal-stretch: 1; }
-                    Text { text: I18n.en ? "Independent Y axis · each signal by its own Min/Max" : "独立 Y 轴 · 每信号按自身 Min/Max"; vertical-alignment: center; font-size: 11px; color: Theme.text-dim; }
                 }
             }
 
@@ -146,8 +229,9 @@ export component ChartWindow inherits ThemedWindow {
                     }
                 }
                 for ser[i] in root.series: Rectangle {
-                    vertical-stretch: ser.visible ? 1 : 0;
-                    max-height: ser.visible ? 100000px : 0px;
+                    visible: root.chart-y-mode == 0 && ser.visible;
+                    vertical-stretch: root.chart-y-mode == 0 && ser.visible ? 1 : 0;
+                    max-height: root.chart-y-mode == 0 && ser.visible ? 100000px : 0px;
                     clip: true;
                     background: Theme.panel;
                     HorizontalLayout {
@@ -156,8 +240,13 @@ export component ChartWindow inherits ThemedWindow {
                             border-width: ser.highlight ? 2px : 1px;
                             border-color: ser.highlight ? ser.clr : Theme.border;
                             background: ser.highlight ? Theme.accent-soft : Theme.panel;
-                            for gy in [0.5]: Rectangle {
-                                width: 100%; height: 1px; y: parent.height * gy; background: Theme.border;
+                            for gy in [0.25, 0.5, 0.75]: ChartHorizontalGridLine {
+                                visible: root.chart-grid;
+                                width: 100%; y: parent.height * gy; line-color: Theme.border;
+                            }
+                            for gx in [0.25, 0.5, 0.75]: ChartVerticalGridLine {
+                                visible: root.chart-grid;
+                                height: 100%; x: parent.width * gx; line-color: Theme.border;
                             }
                             Path {
                                 width: 100%; height: 100%;
@@ -167,10 +256,18 @@ export component ChartWindow inherits ThemedWindow {
                                 stroke-width: ser.highlight ? 3px : 1.5px;
                                 commands: ser.commands;
                             }
-                            if root.chart-cursor: Rectangle {
+                            Path {
+                                visible: root.chart-points;
+                                width: 100%; height: 100%;
+                                viewbox-width: 100 * root.chart-aspect;
+                                viewbox-height: 100;
+                                fill: ser.clr;
+                                commands: ser.marker-commands;
+                            }
+                            if root.chart-interaction-mode == 0 && root.chart-cursor: Rectangle {
                                 width: 1px; height: 100%; x: parent.width * root.cursor-frac; background: Theme.bad;
                             }
-                            if root.chart-cursor && ser.cursor-valid: Rectangle {
+                            if root.chart-interaction-mode == 0 && root.chart-cursor && ser.cursor-valid: Rectangle {
                                 width: 7px; height: 7px;
                                 x: parent.width * root.cursor-frac - 3px;
                                 y: parent.height * ser.cursor-y / 100 - 3px;
@@ -179,7 +276,7 @@ export component ChartWindow inherits ThemedWindow {
                                 border-width: 1px;
                                 border-color: Theme.on-accent;
                             }
-                            if root.chart-cursor && ser.cursor-valid: Rectangle {
+                            if root.chart-interaction-mode == 0 && root.chart-cursor && ser.cursor-valid: Rectangle {
                                 width: 112px; height: 22px;
                                 x: root.cursor-frac > 0.72 ? parent.width * root.cursor-frac - 118px : parent.width * root.cursor-frac + 8px;
                                 y: ser.cursor-y > 78 ? parent.height * ser.cursor-y / 100 - 26px : parent.height * ser.cursor-y / 100 + 6px;
@@ -199,10 +296,10 @@ export component ChartWindow inherits ThemedWindow {
                                 }
                             }
                             // 第二游标（双游标模式，蓝色；点击放置）
-                            if root.chart-cursor && root.chart-dual: Rectangle {
+                            if root.chart-interaction-mode == 0 && root.chart-cursor && root.chart-dual: Rectangle {
                                 width: 1px; height: 100%; x: parent.width * root.cursor-frac2; background: Theme.accent;
                             }
-                            if root.chart-cursor && root.chart-dual && ser.cursor2-valid: Rectangle {
+                            if root.chart-interaction-mode == 0 && root.chart-cursor && root.chart-dual && ser.cursor2-valid: Rectangle {
                                 width: 7px; height: 7px;
                                 x: parent.width * root.cursor-frac2 - 3px;
                                 y: parent.height * ser.cursor2-y / 100 - 3px;
@@ -212,7 +309,7 @@ export component ChartWindow inherits ThemedWindow {
                                 border-color: Theme.on-accent;
                             }
                             // 第二游标的值框（蓝色边，与游标1一样显示实时值）
-                            if root.chart-cursor && root.chart-dual && ser.cursor2-valid: Rectangle {
+                            if root.chart-interaction-mode == 0 && root.chart-cursor && root.chart-dual && ser.cursor2-valid: Rectangle {
                                 width: 112px; height: 22px;
                                 x: root.cursor-frac2 > 0.72 ? parent.width * root.cursor-frac2 - 118px : parent.width * root.cursor-frac2 + 8px;
                                 y: ser.cursor2-y > 78 ? parent.height * ser.cursor2-y / 100 - 26px : parent.height * ser.cursor2-y / 100 + 6px;
@@ -231,17 +328,39 @@ export component ChartWindow inherits ThemedWindow {
                                     overflow: elide;
                                 }
                             }
+                            if root.selection-active && root.chart-interaction-mode == 2: Rectangle {
+                                x: parent.width * Math.min(root.selection-start-frac, root.selection-end-frac);
+                                width: parent.width * Math.abs(root.selection-end-frac - root.selection-start-frac);
+                                height: 100%;
+                                background: Theme.accent.with-alpha(0.14);
+                                border-width: 1px;
+                                border-color: Theme.accent;
+                            }
                             cta := TouchArea {
+                                double-clicked => { root.chart-fit(); }
+                                mouse-cursor: root.chart-interaction-mode == 1 ? grab : root.chart-interaction-mode == 2 ? crosshair : default;
                                 changed mouse-x => {
                                     // 单游标：悬停跟随
-                                    if root.chart-cursor && !root.chart-dual {
+                                    if root.chart-interaction-mode == 0 && root.chart-cursor && !root.chart-dual {
                                         root.cursor-frac = self.mouse-x / self.width;
                                         root.chart-cursor-move();
                                     }
                                 }
                                 pointer-event(e) => {
+                                    if e.kind == PointerEventKind.down && root.chart-interaction-mode == 1 {
+                                        root.pan-last-frac = self.mouse-x / self.width;
+                                    } else if e.kind == PointerEventKind.down && root.chart-interaction-mode == 2 {
+                                        root.selection-start-frac = self.mouse-x / self.width;
+                                        root.selection-end-frac = root.selection-start-frac;
+                                        root.selection-active = true;
+                                    } else if e.kind == PointerEventKind.up && root.chart-interaction-mode == 2 && root.selection-active {
+                                        root.selection-end-frac = self.mouse-x / self.width;
+                                        if Math.abs(root.selection-end-frac - root.selection-start-frac) >= 0.01 {
+                                            root.chart-zoom-selection(root.selection-start-frac, root.selection-end-frac);
+                                        }
+                                        root.selection-active = false;
                                     // 双游标：按下时抓住离鼠标最近的那条游标
-                                    if root.chart-cursor && root.chart-dual && e.kind == PointerEventKind.down {
+                                    } else if root.chart-interaction-mode == 0 && root.chart-cursor && root.chart-dual && e.kind == PointerEventKind.down {
                                         root.drag-target =
                                             Math.abs(self.mouse-x / self.width - root.cursor-frac)
                                             <= Math.abs(self.mouse-x / self.width - root.cursor-frac2)
@@ -255,8 +374,13 @@ export component ChartWindow inherits ThemedWindow {
                                     }
                                 }
                                 moved => {
+                                    if root.chart-interaction-mode == 1 && self.pressed {
+                                        root.chart-pan(self.mouse-x / self.width - root.pan-last-frac);
+                                        root.pan-last-frac = self.mouse-x / self.width;
+                                    } else if root.chart-interaction-mode == 2 && self.pressed && root.selection-active {
+                                        root.selection-end-frac = Math.max(0, Math.min(1, self.mouse-x / self.width));
                                     // 双游标：拖动当前抓住的游标
-                                    if root.chart-cursor && root.chart-dual && self.pressed {
+                                    } else if root.chart-interaction-mode == 0 && root.chart-cursor && root.chart-dual && self.pressed {
                                         if root.drag-target == 2 {
                                             root.cursor-frac2 = self.mouse-x / self.width;
                                         } else {
@@ -294,10 +418,146 @@ export component ChartWindow inherits ThemedWindow {
                         }
                     }
                 }
+                if root.chart-y-mode != 0 && root.series.length > 0: Rectangle {
+                    vertical-stretch: 1;
+                    clip: true;
+                    background: Theme.panel;
+                    HorizontalLayout {
+                        overlay-plot := Rectangle {
+                            clip: true;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            background: Theme.panel;
+                            for gy in [0.25, 0.5, 0.75]: ChartHorizontalGridLine {
+                                visible: root.chart-grid;
+                                width: 100%; y: parent.height * gy; line-color: Theme.border;
+                            }
+                            for gx in [0.25, 0.5, 0.75]: ChartVerticalGridLine {
+                                visible: root.chart-grid;
+                                height: 100%; x: parent.width * gx; line-color: Theme.border;
+                            }
+                            for ser[i] in root.series: Path {
+                                visible: ser.visible;
+                                width: 100%; height: 100%;
+                                viewbox-width: 100 * root.chart-aspect;
+                                viewbox-height: 100;
+                                stroke: ser.clr;
+                                stroke-width: ser.highlight ? 3px : 1.5px;
+                                commands: ser.commands;
+                            }
+                            for ser[i] in root.series: Path {
+                                visible: root.chart-points && ser.visible;
+                                width: 100%; height: 100%;
+                                viewbox-width: 100 * root.chart-aspect;
+                                viewbox-height: 100;
+                                fill: ser.clr;
+                                commands: ser.marker-commands;
+                            }
+                            if root.chart-interaction-mode == 0 && root.chart-cursor: Rectangle {
+                                width: 1px; height: 100%; x: parent.width * root.cursor-frac; background: Theme.bad;
+                            }
+                            for ser[i] in root.series: Rectangle {
+                                visible: root.chart-interaction-mode == 0 && root.chart-cursor && ser.visible && ser.cursor-valid;
+                                width: 7px; height: 7px;
+                                x: parent.width * root.cursor-frac - 3px;
+                                y: parent.height * ser.cursor-y / 100 - 3px;
+                                border-radius: 4px;
+                                background: ser.clr;
+                                border-width: 1px;
+                                border-color: Theme.on-accent;
+                            }
+                            if root.chart-interaction-mode == 0 && root.chart-cursor && root.chart-dual: Rectangle {
+                                width: 1px; height: 100%; x: parent.width * root.cursor-frac2; background: Theme.accent;
+                            }
+                            for ser[i] in root.series: Rectangle {
+                                visible: root.chart-interaction-mode == 0 && root.chart-cursor && root.chart-dual && ser.visible && ser.cursor2-valid;
+                                width: 7px; height: 7px;
+                                x: parent.width * root.cursor-frac2 - 3px;
+                                y: parent.height * ser.cursor2-y / 100 - 3px;
+                                border-radius: 4px;
+                                background: ser.clr;
+                                border-width: 1px;
+                                border-color: Theme.on-accent;
+                            }
+                            if root.selection-active && root.chart-interaction-mode == 2: Rectangle {
+                                x: parent.width * Math.min(root.selection-start-frac, root.selection-end-frac);
+                                width: parent.width * Math.abs(root.selection-end-frac - root.selection-start-frac);
+                                height: 100%;
+                                background: Theme.accent.with-alpha(0.14);
+                                border-width: 1px;
+                                border-color: Theme.accent;
+                            }
+                            overlay-touch := TouchArea {
+                                mouse-cursor: root.chart-interaction-mode == 1 ? grab : root.chart-interaction-mode == 2 ? crosshair : default;
+                                changed mouse-x => {
+                                    if root.chart-interaction-mode == 0 && root.chart-cursor && !root.chart-dual {
+                                        root.cursor-frac = self.mouse-x / self.width;
+                                        root.chart-cursor-move();
+                                    }
+                                }
+                                pointer-event(e) => {
+                                    if e.kind == PointerEventKind.down && root.chart-interaction-mode == 1 {
+                                        root.pan-last-frac = self.mouse-x / self.width;
+                                    } else if e.kind == PointerEventKind.down && root.chart-interaction-mode == 2 {
+                                        root.selection-start-frac = self.mouse-x / self.width;
+                                        root.selection-end-frac = root.selection-start-frac;
+                                        root.selection-active = true;
+                                    } else if e.kind == PointerEventKind.up && root.chart-interaction-mode == 2 && root.selection-active {
+                                        root.selection-end-frac = self.mouse-x / self.width;
+                                        if Math.abs(root.selection-end-frac - root.selection-start-frac) >= 0.01 {
+                                            root.chart-zoom-selection(root.selection-start-frac, root.selection-end-frac);
+                                        }
+                                        root.selection-active = false;
+                                    } else if root.chart-interaction-mode == 0 && root.chart-cursor && root.chart-dual && e.kind == PointerEventKind.down {
+                                        root.drag-target =
+                                            Math.abs(self.mouse-x / self.width - root.cursor-frac)
+                                            <= Math.abs(self.mouse-x / self.width - root.cursor-frac2)
+                                            ? 1 : 2;
+                                        if root.drag-target == 2 {
+                                            root.cursor-frac2 = self.mouse-x / self.width;
+                                        } else {
+                                            root.cursor-frac = self.mouse-x / self.width;
+                                        }
+                                        root.chart-cursor-move();
+                                    }
+                                }
+                                moved => {
+                                    if root.chart-interaction-mode == 1 && self.pressed {
+                                        root.chart-pan(self.mouse-x / self.width - root.pan-last-frac);
+                                        root.pan-last-frac = self.mouse-x / self.width;
+                                    } else if root.chart-interaction-mode == 2 && self.pressed && root.selection-active {
+                                        root.selection-end-frac = Math.max(0, Math.min(1, self.mouse-x / self.width));
+                                    } else if root.chart-interaction-mode == 0 && root.chart-cursor && root.chart-dual && self.pressed {
+                                        if root.drag-target == 2 {
+                                            root.cursor-frac2 = self.mouse-x / self.width;
+                                        } else {
+                                            root.cursor-frac = self.mouse-x / self.width;
+                                        }
+                                        root.chart-cursor-move();
+                                    }
+                                }
+                                double-clicked => { root.chart-fit(); }
+                                scroll-event(e) => {
+                                    root.chart-zoom(e.delta-y / 1px, self.mouse-x / self.width);
+                                    accept
+                                }
+                            }
+                        }
+                        Rectangle {
+                            width: 66px;
+                            background: Theme.zebra;
+                            Rectangle { x: 0px; width: 1px; height: 100%; background: Theme.border; }
+                            Rectangle { x: 5px; width: 2px; height: parent.height - 16px; y: 8px; background: Theme.text-dim; }
+                            Text { text: root.series[0].axis-max; x: 12px; y: 6px; width: 50px; font-size: 10px; font-family: Theme.mono; color: Theme.text; overflow: elide; }
+                            Text { text: root.series[0].axis-mid; x: 12px; y: parent.height / 2 - 6px; width: 50px; font-size: 10px; font-family: Theme.mono; color: Theme.text-dim; overflow: elide; }
+                            Text { text: root.series[0].axis-min; x: 12px; y: parent.height - 18px; width: 50px; font-size: 10px; font-family: Theme.mono; color: Theme.text; overflow: elide; }
+                        }
+                    }
+                }
             }
 
             Rectangle {
-                height: 22px; background: xta.has-hover ? Theme.accent-soft : Theme.panel;
+                height: 24px; background: xta.has-hover ? Theme.accent-soft : Theme.panel;
                 Rectangle { width: 100%; height: 1px; y: 0; background: Theme.border; }
                 xta := TouchArea {
                     mouse-cursor: ew-resize;
@@ -306,19 +566,19 @@ export component ChartWindow inherits ThemedWindow {
                         accept
                     }
                 }
-                // 5 个均匀时间刻度（绘图区从 0 到 width-86，最右 86px 是 Y 轴列）
+                // 5 个均匀时间刻度（绘图区右侧 66px 是 Y 轴列）。绝对时间包含完整日期和时间。
                 for lbl[idx] in root.chart-xlabels: Text {
                     text: lbl;
-                    x: Math.max(0px, Math.min((parent.width - 86px) - 76px,
-                        (parent.width - 86px) * (idx / 4.0) - 38px));
-                    width: 76px; height: 100%;
+                    x: Math.max(0px, Math.min((parent.width - 66px) - 156px,
+                        (parent.width - 66px) * (idx / 4.0) - 78px));
+                    width: 156px; height: 100%;
                     vertical-alignment: center; horizontal-alignment: center;
                     font-size: 10px; font-family: Theme.mono; color: Theme.text-dim;
                 }
                 // 刻度竖线
                 for t[idx] in root.chart-xlabels: Rectangle {
                     width: 1px; height: 4px; y: 0;
-                    x: (parent.width - 86px) * (idx / 4.0);
+                    x: (parent.width - 66px) * (idx / 4.0);
                     background: Theme.border;
                 }
             }

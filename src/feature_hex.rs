@@ -4,7 +4,10 @@ use crate::{FeatureTxByteCell, FeatureTxByteRow, parse_tx_bytes};
 use slint::{Model, ModelRc, VecModel};
 use std::rc::Rc;
 
-pub(crate) fn build_feature_hex_rows(data: &[u8], requested_len: usize) -> ModelRc<FeatureTxByteRow> {
+pub(crate) fn build_feature_hex_rows(
+    data: &[u8],
+    requested_len: usize,
+) -> ModelRc<FeatureTxByteRow> {
     let row_count = requested_len.max(1).div_ceil(8);
     let rows = (0..row_count)
         .map(|row| {
@@ -31,14 +34,16 @@ pub(crate) fn build_feature_hex_rows(data: &[u8], requested_len: usize) -> Model
     ModelRc::from(Rc::new(VecModel::from(rows)))
 }
 
-pub(crate) fn edit_feature_hex_byte(
-    rows: &ModelRc<FeatureTxByteRow>,
-    index: usize,
-    value: &str,
-) {
-    let Some(row) = rows.row_data(index / 8) else { return };
-    let Some(mut cell) = row.bytes.row_data(index % 8) else { return };
-    if !cell.enabled { return; }
+pub(crate) fn edit_feature_hex_byte(rows: &ModelRc<FeatureTxByteRow>, index: usize, value: &str) {
+    let Some(row) = rows.row_data(index / 8) else {
+        return;
+    };
+    let Some(mut cell) = row.bytes.row_data(index % 8) else {
+        return;
+    };
+    if !cell.enabled {
+        return;
+    }
     let normalized = value
         .chars()
         .filter(|c| c.is_ascii_hexdigit())
@@ -69,7 +74,9 @@ pub(crate) fn collect_feature_hex_rows(
     for index in 0..length {
         let row = rows.row_data(index / 8).ok_or(index)?;
         let cell = row.bytes.row_data(index % 8).ok_or(index)?;
-        if !cell.enabled || !cell.valid { return Err(index); }
+        if !cell.enabled || !cell.valid {
+            return Err(index);
+        }
         data.push(u8::from_str_radix(&cell.hex, 16).map_err(|_| index)?);
     }
     Ok(data)

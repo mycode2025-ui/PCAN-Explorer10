@@ -1,12 +1,15 @@
 // One-window Slint page split from the original monolithic file.
+import { ProductButton } from "design-system.slint";
 import { Button, ComboBox, LineEdit, CheckBox, TabWidget, ListView, ScrollView, VerticalBox, HorizontalBox, TextEdit } from "std-widgets.slint";
 import { ByteCell, SimRow, MsgRow, SigRow, TxSigRow, TxRow, PbFileRow, TreeRow, ChanStat, IdStat, ChartSeries, DbcSignalRow, SignalPickRow, I18n, Theme, ColW, Cell, HCell, SortHeader, TBtn, Icon, RibbonBtn, RibbonGroup, RibbonTab, ConvTab, SimGlyph, ThemedWindow } from "common.slint";
 
 export component ConvertWindow inherits ThemedWindow {
     title: I18n.en ? "PcanWork - Record File Conversion" : "PcanWork - 记录文件转换";
     icon: @image-url("logo.svg");
-    preferred-width: 660px;
-    preferred-height: 420px;
+    preferred-width: 760px;
+    preferred-height: 500px;
+    min-width: 640px;
+    min-height: 420px;
     background: Theme.bg;
 
     in-out property <int> tab: 0; // 0=single format, 1=batch, 2=signal merge
@@ -48,7 +51,7 @@ export component ConvertWindow inherits ThemedWindow {
                 height: 40px; background: Theme.panel; border-width: 1px; border-color: Theme.border;
                 HorizontalLayout {
                     padding: 6px; spacing: 8px;
-                    Button { text: I18n.en ? "Source file" : "源文件"; clicked => { root.pick-src-file(); } }
+                    ProductButton { text: I18n.en ? "Source file" : "源文件"; clicked => { root.pick-src-file(); } }
                     Text {
                         text: root.src-file == "" ? (I18n.en ? "(no file selected)" : "(未选择文件)") : root.src-file;
                         vertical-alignment: center; font-size: 13px; color: Theme.text; overflow: elide; horizontal-stretch: 1;
@@ -59,7 +62,7 @@ export component ConvertWindow inherits ThemedWindow {
                 spacing: 8px;
                 Text { text: I18n.en ? "Target format" : "目标格式"; vertical-alignment: center; font-size: 13px; }
                 ComboBox { width: 120px; model: ["CSV", "ASC", "BLF"]; current-index <=> root.fmt1; }
-                Button { text: I18n.en ? "Convert" : "格式转换"; clicked => { root.do-convert(); } }
+                ProductButton { text: I18n.en ? "Convert" : "格式转换"; clicked => { root.do-convert(); } }
             }
             Text {
                 text: I18n.en ? "Supported: CSV / Vector ASC / BLF interconversion." : "支持范围：CSV / Vector ASC / BLF 互相转换。";
@@ -78,7 +81,7 @@ export component ConvertWindow inherits ThemedWindow {
                 height: 40px; background: Theme.panel; border-width: 1px; border-color: Theme.border;
                 HorizontalLayout {
                     padding: 6px; spacing: 8px;
-                    Button { text: I18n.en ? "Source folder" : "源目录"; clicked => { root.pick-src-dir(); } }
+                    ProductButton { text: I18n.en ? "Source folder" : "源目录"; clicked => { root.pick-src-dir(); } }
                     Text {
                         text: root.src-dir == "" ? (I18n.en ? "(no folder selected)" : "(未选择目录)") : root.src-dir;
                         vertical-alignment: center; font-size: 13px; color: Theme.text; overflow: elide; horizontal-stretch: 1;
@@ -89,7 +92,7 @@ export component ConvertWindow inherits ThemedWindow {
                 height: 40px; background: Theme.panel; border-width: 1px; border-color: Theme.border;
                 HorizontalLayout {
                     padding: 6px; spacing: 8px;
-                    Button { text: I18n.en ? "Target folder" : "目标目录"; clicked => { root.pick-out-dir(); } }
+                    ProductButton { text: I18n.en ? "Target folder" : "目标目录"; clicked => { root.pick-out-dir(); } }
                     Text {
                         text: root.out-dir == "" ? (I18n.en ? "(no folder selected)" : "(未选择目录)") : root.out-dir;
                         vertical-alignment: center; font-size: 13px; color: Theme.text; overflow: elide; horizontal-stretch: 1;
@@ -100,7 +103,7 @@ export component ConvertWindow inherits ThemedWindow {
                 spacing: 8px;
                 Text { text: I18n.en ? "Target format" : "目标格式"; vertical-alignment: center; font-size: 13px; }
                 ComboBox { width: 120px; model: ["CSV", "ASC", "BLF"]; current-index <=> root.fmt2; }
-                Button { text: I18n.en ? "Start" : "启动转换"; clicked => { root.do-batch(); } }
+                ProductButton { text: I18n.en ? "Start" : "启动转换"; clicked => { root.do-batch(); } }
             }
             ScrollView {
                 vertical-stretch: 1;

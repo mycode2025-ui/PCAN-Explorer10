@@ -1,4 +1,5 @@
 // One-window Slint page split from the original monolithic file.
+import { ProductButton } from "design-system.slint";
 import { Button, ComboBox, LineEdit, CheckBox, TabWidget, ListView, ScrollView, VerticalBox, HorizontalBox, TextEdit } from "std-widgets.slint";
 import { ByteCell, SimRow, MsgRow, SigRow, TxSigRow, TxRow, PbFileRow, TreeRow, ChanStat, IdStat, ChartSeries, DbcSignalRow, SignalPickRow, I18n, Theme, ColW, Cell, HCell, SortHeader, TBtn, Icon, RibbonBtn, RibbonGroup, RibbonTab, ConvTab, SimGlyph, ThemedWindow } from "common.slint";
 
@@ -7,6 +8,8 @@ export component SignalSelectWindow inherits ThemedWindow {
     icon: @image-url("logo.svg");
     preferred-width: 900px;
     preferred-height: 560px;
+    min-width: 720px;
+    min-height: 480px;
     background: Theme.bg;
 
     in property <[SignalPickRow]> signal-pick-rows;
@@ -162,9 +165,9 @@ export component SignalSelectWindow inherits ThemedWindow {
             HorizontalLayout {
                 spacing: 8px;
                 Text { text: root.signal-pick-summary; color: Theme.text-dim; font-size: Theme.fs; vertical-alignment: center; horizontal-stretch: 1; }
-                Button { text: I18n.en ? "OK" : "确定"; width: 96px; clicked => { root.signal-pick-ok(); } }
-                Button { text: I18n.en ? "Cancel" : "取消"; width: 96px; clicked => { root.signal-pick-cancel(); } }
-                Button { text: I18n.en ? "Apply" : "应用"; width: 96px; clicked => { root.signal-pick-apply(); } }
+                ProductButton { text: I18n.en ? "OK" : "确定"; width: 96px; clicked => { root.signal-pick-ok(); } }
+                ProductButton { text: I18n.en ? "Cancel" : "取消"; width: 96px; clicked => { root.signal-pick-cancel(); } }
+                ProductButton { text: I18n.en ? "Apply" : "应用"; width: 96px; clicked => { root.signal-pick-apply(); } }
             }
         }
     }
