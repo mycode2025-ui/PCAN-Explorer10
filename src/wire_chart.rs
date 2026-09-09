@@ -3,6 +3,72 @@
 // Windows are passed by reference; app is an owned Rc clone. Unused params are by design.
 type ChartExportSeries = Vec<(String, String, Vec<(f64, f64)>)>;
 
+fn add_marked_curve_batch(a: &mut App) -> (usize, usize) {
+    let before = a.series.len();
+    let total = if a.sig_cat == 3 {
+        let mut names: Vec<String> = a
+            .signal_pick_expr_marked
+            .iter()
+            .filter(|name| a.expr_vars.iter().any(|expr| expr.name == name.as_str()))
+            .cloned()
+            .collect();
+        names.sort();
+        for name in &names {
+            let _ = add_expr_to_chart(a, name);
+        }
+        names.len()
+    } else if a.sig_cat == 0 {
+        let mut signals: Vec<(u32, String)> = a
+            .signal_pick_marked
+            .iter()
+            .filter(|(id, signal)| {
+                a.dbcs.iter().any(|dbc| {
+                    dbc.messages().any(|message| {
+                        message.id == *id && message.signals.iter().any(|item| item.name == *signal)
+                    })
+                })
+            })
+            .cloned()
+            .collect();
+        signals.sort();
+        for (id, signal) in &signals {
+            let _ = add_signal_to_chart(a, *id, signal);
+        }
+        signals.len()
+    } else {
+        0
+    };
+    (a.series.len() - before, total)
+}
+
+fn log_marked_curve_batch(a: &mut App) -> bool {
+    let (added, total) = add_marked_curve_batch(a);
+    if total == 0 {
+        a.log(if a.sig_cat == 3 {
+            "请先勾选一个或多个表达式"
+        } else {
+            "请先勾选一个或多个 DBC 信号"
+        });
+        return false;
+    }
+    a.log(format!(
+        "批量添加曲线完成: 新增 {added} 条，已存在 {} 条",
+        total - added
+    ));
+    true
+}
+
+fn clear_all_chart_series(a: &mut App) -> usize {
+    let removed = a.series.len();
+    a.series.clear();
+    a.chart_view = None;
+    a.chart_zoom_target = None;
+    a.chart_pause_view = None;
+    a.chart_frozen_series = a.chart_paused.then(Vec::new);
+    a.chart_highlight = None;
+    removed
+}
+
 fn chart_export_snapshot(app: &App) -> ChartExportSeries {
     app.series
         .iter()
@@ -344,6 +410,14 @@ new_span = new_span.min(data_span);
     }
     {
         let app = app.clone();
+        chart_window.on_clear_chart_series(move || {
+            let mut a = app.borrow_mut();
+            let removed = clear_all_chart_series(&mut a);
+            a.log(format!("已清空 {removed} 条曲线"));
+        });
+    }
+    {
+        let app = app.clone();
         signal_window.on_signal_pick_search(move |s| {
             let mut a = app.borrow_mut();
             a.signal_pick_filter = s.to_string();
@@ -371,9 +445,17 @@ new_span = new_span.min(data_span);
                         a.signal_pick_msg_expanded.remove(&id);
                     }
                 }
-                SignalPickItem::Signal(id, signal) => a.signal_pick_selected = Some((id, signal)),
+                SignalPickItem::Signal(id, signal) => {
+                    a.signal_pick_selected = Some((id, signal.clone()));
+                    if !a.signal_pick_marked.insert((id, signal.clone())) {
+                        a.signal_pick_marked.remove(&(id, signal));
+                    }
+                }
                 SignalPickItem::ExprVar(name) => {
                     a.signal_pick_expr_selected = Some(name.clone());
+                    if !a.signal_pick_expr_marked.insert(name.clone()) {
+                        a.signal_pick_expr_marked.remove(&name);
+                    }
                     // 选中即把该表达式填进编辑栏, 方便修改
                     if let Some(w) = picker.upgrade()
                         && let Some(ev) = a.expr_vars.iter().find(|e| e.name == name)
@@ -397,11 +479,13 @@ new_span = new_span.min(data_span);
             match item {
                 SignalPickItem::Signal(id, signal) => {
                     a.signal_pick_selected = Some((id, signal.clone()));
+                    a.signal_pick_marked.insert((id, signal.clone()));
                     let msg = add_signal_to_chart(&mut a, id, &signal);
                     a.log(msg);
                 }
                 SignalPickItem::ExprVar(name) => {
                     a.signal_pick_expr_selected = Some(name.clone());
+                    a.signal_pick_expr_marked.insert(name.clone());
                     let msg = add_expr_to_chart(&mut a, &name);
                     a.log(msg);
                 }
@@ -419,20 +503,41 @@ new_span = new_span.min(data_span);
     }
     {
         let app = app.clone();
+        signal_window.on_signal_pick_select_all(move || {
+            let mut a = app.borrow_mut();
+            let items = a.signal_pick_items.clone();
+            if a.sig_cat == 3 {
+                for item in items {
+                    if let SignalPickItem::ExprVar(name) = item {
+                        a.signal_pick_expr_marked.insert(name);
+                    }
+                }
+            } else if a.sig_cat == 0 {
+                for item in items {
+                    if let SignalPickItem::Signal(id, signal) = item {
+                        a.signal_pick_marked.insert((id, signal));
+                    }
+                }
+            }
+        });
+    }
+    {
+        let app = app.clone();
+        signal_window.on_signal_pick_clear_selection(move || {
+            let mut a = app.borrow_mut();
+            if a.sig_cat == 3 {
+                a.signal_pick_expr_marked.clear();
+            } else if a.sig_cat == 0 {
+                a.signal_pick_marked.clear();
+            }
+        });
+    }
+    {
+        let app = app.clone();
         let picker = signal_window.as_weak();
         signal_window.on_signal_pick_ok(move || {
             let mut a = app.borrow_mut();
-            let added = if a.sig_cat == 3 {
-                match a.signal_pick_expr_selected.clone() {
-                    Some(name) => { let m = add_expr_to_chart(&mut a, &name); a.log(m); true }
-                    None => { a.log("请先选择一个表达式"); false }
-                }
-            } else {
-                match a.signal_pick_selected.clone() {
-                    Some((id, signal)) => { let m = add_signal_to_chart(&mut a, id, &signal); a.log(m); true }
-                    None => { a.log("请先选择一个 DBC 信号"); false }
-                }
-            };
+            let added = log_marked_curve_batch(&mut a);
             if added && let Some(picker) = picker.upgrade() {
                 let _ = picker.hide();
             }
@@ -442,17 +547,7 @@ new_span = new_span.min(data_span);
         let app = app.clone();
         signal_window.on_signal_pick_apply(move || {
             let mut a = app.borrow_mut();
-            if a.sig_cat == 3 {
-                match a.signal_pick_expr_selected.clone() {
-                    Some(name) => { let m = add_expr_to_chart(&mut a, &name); a.log(m); }
-                    None => a.log("请先选择一个表达式"),
-                }
-            } else {
-                match a.signal_pick_selected.clone() {
-                    Some((id, signal)) => { let m = add_signal_to_chart(&mut a, id, &signal); a.log(m); }
-                    None => a.log("请先选择一个 DBC 信号"),
-                }
-            }
+            let _ = log_marked_curve_batch(&mut a);
         });
     }
     {
@@ -496,6 +591,7 @@ new_span = new_span.min(data_span);
             }
             recompute_expr_ids(&mut a);
             a.signal_pick_expr_selected = Some(name.clone());
+            a.signal_pick_expr_marked.insert(name.clone());
             let warn = if unknown.is_empty() { String::new() } else { format!("（DBC 中暂无: {}）", unknown.join(", ")) };
             a.log(format!("表达式已保存: {name} = {formula}{warn}"));
             drop(a);
@@ -513,6 +609,7 @@ new_span = new_span.min(data_span);
             };
             a.expr_vars.retain(|e| e.name != name);
             a.signal_pick_expr_selected = None;
+            a.signal_pick_expr_marked.remove(&name);
             recompute_expr_ids(&mut a);
             a.log(format!("已删除表达式: {name}"));
             drop(a);

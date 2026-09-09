@@ -478,6 +478,7 @@ export component TBtn inherits ProductButton {
 export component Icon inherits Rectangle {
     in property <string> name;
     in property <color> clr: Theme.text;
+    in property <length> line-weight: 1.7px;
     property <string> fcmd:
         name == "start" ? "M8 5 L19 12 L8 19 Z" :
         name == "stop" ? "M7 7 H17 V17 H7 Z" :
@@ -524,7 +525,7 @@ export component Icon inherits Rectangle {
     }
     Path {
         visible: scmd != "";
-        commands: scmd; stroke: clr; stroke-width: 1.7px;
+        commands: scmd; stroke: clr; stroke-width: root.line-weight;
         viewbox-width: 24; viewbox-height: 24; width: 100%; height: 100%;
     }
     Path {

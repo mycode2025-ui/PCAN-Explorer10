@@ -978,6 +978,7 @@ pub(crate) struct App {
     pub(crate) expr_decode_ids: HashSet<u32>,
     pub(crate) sig_cat: i32,
     pub(crate) signal_pick_expr_selected: Option<String>,
+    pub(crate) signal_pick_expr_marked: HashSet<String>,
 
     pub(crate) console_enabled: bool,
     pub(crate) console_id: Option<u32>,
@@ -1025,6 +1026,7 @@ pub(crate) struct App {
     pub(crate) signal_pick_items: Vec<SignalPickItem>,
     pub(crate) signal_pick_cache: u64,
     pub(crate) signal_pick_selected: Option<(u32, String)>,
+    pub(crate) signal_pick_marked: HashSet<(u32, String)>,
     pub(crate) signal_pick_msg_expanded: HashSet<u32>,
     pub(crate) signal_pick_root_open: bool,
     pub(crate) signal_pick_messages_open: bool,

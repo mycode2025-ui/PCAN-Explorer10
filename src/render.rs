@@ -17,6 +17,7 @@ pub(crate) fn refresh_signal_picker(a: &mut App, signal_window: &SignalSelectWin
     let filter_text = a.signal_pick_filter.trim().to_ascii_lowercase();
     let filtering = !filter_text.is_empty();
     let selected = a.signal_pick_selected.clone();
+    let marked = a.signal_pick_marked.clone();
 
     // Append a picker row plus its backing item (kept index-aligned).
     #[allow(clippy::too_many_arguments)]
@@ -31,7 +32,7 @@ pub(crate) fn refresh_signal_picker(a: &mut App, signal_window: &SignalSelectWin
         expandable: bool,
         expanded: bool,
         selectable: bool,
-        selected: bool,
+        marked: bool,
     ) {
         rows.push(SignalPickRow {
             level,
@@ -41,8 +42,8 @@ pub(crate) fn refresh_signal_picker(a: &mut App, signal_window: &SignalSelectWin
             expandable,
             expanded,
             selectable,
-            selected,
-            marked: false,
+            selected: marked,
+            marked,
         });
         items.push(item);
     }
@@ -59,7 +60,7 @@ pub(crate) fn refresh_signal_picker(a: &mut App, signal_window: &SignalSelectWin
             if filtering && !ev.name.to_ascii_lowercase().contains(&filter_text) {
                 continue;
             }
-            let sel = a.signal_pick_expr_selected.as_deref() == Some(ev.name.as_str());
+            let sel = a.signal_pick_expr_marked.contains(&ev.name);
             let unit = if ev.unit.is_empty() {
                 String::new()
             } else {
@@ -81,9 +82,17 @@ pub(crate) fn refresh_signal_picker(a: &mut App, signal_window: &SignalSelectWin
         }
         signal_window.set_signal_pick_summary(
             if en {
-                format!("Expressions: {}", a.expr_vars.len())
+                format!(
+                    "Selected: {}  Expressions: {}",
+                    a.signal_pick_expr_marked.len(),
+                    a.expr_vars.len()
+                )
             } else {
-                format!("表达式: {} 个", a.expr_vars.len())
+                format!(
+                    "已选择: {} 个  表达式: {} 个",
+                    a.signal_pick_expr_marked.len(),
+                    a.expr_vars.len()
+                )
             }
             .into(),
         );
@@ -223,10 +232,7 @@ pub(crate) fn refresh_signal_picker(a: &mut App, signal_window: &SignalSelectWin
                     };
                     for s in signal_iter {
                         visible_signals += 1;
-                        let is_selected = selected
-                            .as_ref()
-                            .map(|(id, sig)| *id == m.id && sig == &s.name)
-                            .unwrap_or(false);
+                        let is_selected = marked.contains(&(m.id, s.name.clone()));
                         let unit = if s.unit.is_empty() {
                             String::new()
                         } else {
@@ -260,16 +266,16 @@ pub(crate) fn refresh_signal_picker(a: &mut App, signal_window: &SignalSelectWin
         let summary = match selected {
             Some((id, signal)) => {
                 if en {
-                    format!("Selected: groups 1, signals 1  0x{id:X} / {signal}")
+                    format!("Selected: {}  Last: 0x{id:X} / {signal}", marked.len())
                 } else {
-                    format!("已选中: 分组 1, 信号 1  0x{id:X} / {signal}")
+                    format!("已选择: {} 个  最近: 0x{id:X} / {signal}", marked.len())
                 }
             }
             None => {
                 if en {
-                    format!("Selected: groups 0, signals 0    visible signals {visible_signals}")
+                    format!("Selected: {}  Visible: {visible_signals}", marked.len())
                 } else {
-                    format!("已选中: 分组 0, 信号 0    可见信号 {visible_signals}")
+                    format!("已选择: {} 个  可见: {visible_signals}", marked.len())
                 }
             }
         };
@@ -322,6 +328,7 @@ pub(crate) fn refresh_signal_picker(a: &mut App, signal_window: &SignalSelectWin
         r.expanded.hash(&mut hasher);
         r.selectable.hash(&mut hasher);
         r.selected.hash(&mut hasher);
+        r.marked.hash(&mut hasher);
     }
     let sig = hasher.finish();
     if sig != a.signal_pick_cache {

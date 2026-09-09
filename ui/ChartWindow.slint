@@ -9,13 +9,14 @@ component ChartToolButton inherits TBtn {
     text: compact ? "" : (icon-name == "" ? label : "   " + label);
     accessible-label: label;
     // 44x40 -> 33x30: the control footprint is reduced by exactly one quarter.
-    // Keep a 24px glyph so the symbol itself remains prominent and readable.
+    // Keep the hit target unchanged while making the glyph about 5% smaller and lighter.
     h: 30px;
     width: compact ? 33px : root.natural-width;
     Icon {
         visible: root.icon-name != "";
         name: root.icon-name;
-        width: 24px; height: 24px;
+        width: 23px; height: 23px;
+        line-weight: 1.45px;
         x: root.compact ? (parent.width - self.width) / 2 : 6px;
         y: (parent.height - self.height) / 2;
         clr: root.active ? Theme.on-accent : Theme.text;
@@ -110,6 +111,7 @@ export component ChartWindow inherits ThemedWindow {
     callback chart-topmost-toggle(bool);
     callback chart-toggle-pause();
     callback clear-chart();
+    callback clear-chart-series();
     callback chart-cursor-toggle();
     callback chart-dual-toggle();
     callback chart-cursor-move();
@@ -138,8 +140,8 @@ export component ChartWindow inherits ThemedWindow {
                     Rectangle { width: 100%; height: 1px; y: parent.height - 1px; background: Theme.border; }
                     HorizontalLayout {
                         padding: 4px; spacing: 6px; alignment: start;
-                        TBtn { boxed: true; text: I18n.en ? "Select Signal" : "选择信号"; clicked => { root.open-signal-selector(); } }
-                        Text { text: I18n.en ? "Add from DBC message tree" : "从 DBC 消息树添加"; vertical-alignment: center; font-size: Theme.fs-sm; color: Theme.text-dim; horizontal-stretch: 1; }
+                        TBtn { boxed: true; width: 116px; text: I18n.en ? "Batch Add" : "批量添加"; clicked => { root.open-signal-selector(); } }
+                        TBtn { width: 116px; text: I18n.en ? "Clear Curves" : "清空曲线"; btn-enabled: root.series.length > 0; clicked => { root.clear-chart-series(); } }
                     }
                 }
                 // 第二行：曲线信号（列表标题）

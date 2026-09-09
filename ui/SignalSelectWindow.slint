@@ -27,6 +27,8 @@ export component SignalSelectWindow inherits ThemedWindow {
     callback signal-pick-search(string);
     callback signal-pick-row-clicked(int);
     callback signal-pick-row-double-clicked(int);
+    callback signal-pick-select-all();
+    callback signal-pick-clear-selection();
     callback signal-pick-ok();
     callback signal-pick-apply();
     callback signal-pick-cancel();
@@ -165,6 +167,8 @@ export component SignalSelectWindow inherits ThemedWindow {
             HorizontalLayout {
                 spacing: 8px;
                 Text { text: root.signal-pick-summary; color: Theme.text-dim; font-size: Theme.fs; vertical-alignment: center; horizontal-stretch: 1; }
+                ProductButton { text: I18n.en ? "Select Visible" : "全选可见"; width: 96px; clicked => { root.signal-pick-select-all(); } }
+                ProductButton { text: I18n.en ? "Clear Selection" : "清除选择"; width: 96px; clicked => { root.signal-pick-clear-selection(); } }
                 ProductButton { text: I18n.en ? "OK" : "确定"; width: 96px; clicked => { root.signal-pick-ok(); } }
                 ProductButton { text: I18n.en ? "Cancel" : "取消"; width: 96px; clicked => { root.signal-pick-cancel(); } }
                 ProductButton { text: I18n.en ? "Apply" : "应用"; width: 96px; clicked => { root.signal-pick-apply(); } }
