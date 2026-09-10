@@ -195,6 +195,9 @@ pub enum Cmd {
         repeat: i64,
         enable: bool,
     },
+    StopPeriodic {
+        handle: u64,
+    },
     SetDynamicPeriodic {
         handle: u64,
         config: Option<DynamicPeriodicConfig>,
@@ -660,6 +663,21 @@ fn update_sim_periodic(periodic: &mut SimPeriodic, now: Instant) -> Result<bool,
 #[path = "can/send_queue.rs"]
 mod send_queue;
 use send_queue::*;
+#[path = "can/precise_wait.rs"]
+mod precise_wait;
+use precise_wait::*;
+
+/// Advances a form's sequence seed past the frames that were just queued.
+/// This keeps repeated one-frame sends continuous instead of restarting from
+/// the same ID and payload on every click.
+pub fn advance_send_sequence_seed(
+    frame: &mut CanFrame,
+    steps: u64,
+    id_increment: bool,
+    data_increment: bool,
+) {
+    advance_sequence_frame(frame, steps, id_increment, data_increment);
+}
 
 fn dynamic_rand01(seed: u64) -> f64 {
     let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
@@ -1186,6 +1204,137 @@ mod tests {
         assert_eq!((second.id, second.data), (0x7FF, vec![0x00, 0x01]));
         assert_eq!((third.id, third.data), (0x000, vec![0x01, 0x01]));
         assert_eq!(job.remaining(), 0);
+    }
+
+    #[test]
+    fn completed_sequence_advances_the_next_form_seed() {
+        let mut seed = frame(1);
+        seed.id = 0x100;
+        seed.data = vec![0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77];
+
+        advance_send_sequence_seed(&mut seed, 1, true, true);
+
+        assert_eq!(seed.id, 0x101);
+        assert_eq!(
+            seed.data,
+            vec![0x01, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77]
+        );
+    }
+
+    #[test]
+    fn form_seed_advances_by_the_entire_queued_sequence() {
+        let mut seed = frame(1);
+        seed.id = 0x7FE;
+        seed.data = vec![0xFF, 0x00];
+
+        advance_send_sequence_seed(&mut seed, 3, true, true);
+
+        assert_eq!(seed.id, 0x001);
+        assert_eq!(seed.data, vec![0x02, 0x01]);
+    }
+
+    #[test]
+    fn form_seed_increment_options_are_independent() {
+        let mut id_only = frame(1);
+        id_only.id = 0x100;
+        id_only.data = vec![0x10];
+        advance_send_sequence_seed(&mut id_only, 1, true, false);
+        assert_eq!((id_only.id, id_only.data), (0x101, vec![0x10]));
+
+        let mut data_only = frame(1);
+        data_only.id = 0x100;
+        data_only.data = vec![0x10];
+        advance_send_sequence_seed(&mut data_only, 1, false, true);
+        assert_eq!((data_only.id, data_only.data), (0x100, vec![0x11]));
+    }
+
+    #[test]
+    fn stop_periodic_removes_static_and_dynamic_jobs_for_the_handle() {
+        let now = Instant::now();
+        let mut periodics = HashMap::from([(
+            7,
+            Periodic {
+                frame: frame(1),
+                period: Duration::from_millis(10),
+                next: now,
+                remaining: 1000,
+                sent: 67,
+            },
+        )]);
+        let mut dynamic_periodics = HashMap::from([(
+            7,
+            DynamicPeriodic {
+                config: DynamicPeriodicConfig {
+                    frame: frame(1),
+                    dbcs: Vec::new(),
+                    dbc_id: 0x116,
+                    signal_values: Vec::new(),
+                    varies: Vec::new(),
+                    period_ms: 10,
+                    repeat: 1000,
+                    start_sent: 67,
+                },
+                next: now,
+                sent: 67,
+            },
+        )]);
+
+        controller::stop_periodic_jobs(&mut periodics, &mut dynamic_periodics, 7);
+
+        assert!(!periodics.contains_key(&7));
+        assert!(!dynamic_periodics.contains_key(&7));
+    }
+
+    #[test]
+    fn periodic_deadline_does_not_accumulate_wakeup_delay() {
+        let scheduled = Instant::now();
+        let period = Duration::from_millis(10);
+        let woke_late = scheduled + Duration::from_millis(2);
+
+        let next = controller::advance_periodic_deadline(scheduled, period, woke_late);
+
+        assert_eq!(next, scheduled + period);
+    }
+
+    #[test]
+    fn periodic_deadline_skips_expired_slots_after_an_overrun() {
+        let scheduled = Instant::now();
+        let period = Duration::from_millis(10);
+        let woke_after_next_slot = scheduled + Duration::from_millis(12);
+
+        let next = controller::advance_periodic_deadline(scheduled, period, woke_after_next_slot);
+
+        assert_eq!(next, woke_after_next_slot + period);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "host timing diagnostic; run explicitly"]
+    fn windows_precise_waiter_timing_diagnostic() {
+        let waiter = PreciseWaiter::new();
+        for period_ms in [1u64, 10] {
+            let period = Duration::from_millis(period_ms);
+            let samples = 200usize;
+            let base = Instant::now();
+            let mut previous = base;
+            let mut errors_ms = Vec::with_capacity(samples);
+            let mut total_interval_ms = 0.0;
+            for slot in 1..=samples {
+                waiter.wait_until(base + period * slot as u32);
+                let now = Instant::now();
+                let interval_ms = now.duration_since(previous).as_secs_f64() * 1000.0;
+                total_interval_ms += interval_ms;
+                errors_ms.push((interval_ms - period_ms as f64).abs());
+                previous = now;
+            }
+            errors_ms.sort_by(f64::total_cmp);
+            let p95 = errors_ms[(samples * 95 / 100).min(samples - 1)];
+            let max = errors_ms[samples - 1];
+            println!(
+                "period={period_ms}ms mean={:.4}ms p95_abs_error={p95:.4}ms max_abs_error={max:.4}ms",
+                total_interval_ms / samples as f64
+            );
+        }
     }
 
     #[test]

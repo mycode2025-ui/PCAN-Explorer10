@@ -996,6 +996,7 @@ pub(crate) struct App {
     pub(crate) tx_sig_cache: u64,
     pub(crate) tx_msgs_cache: u64,
     pub(crate) tx_list_cache: u64,
+    pub(crate) tx_model: Rc<VecModel<TxRow>>,
     pub(crate) tx_checked: HashSet<u64>,
     tx_speed: f64,
     chan_names_cache: u64,
@@ -1875,6 +1876,9 @@ impl ChildWindowStore {
             .chart
             .set_chart_xlabels(ModelRc::from(app.borrow().chart_xlabel_model.clone()));
         windows
+            .tx
+            .set_txs(ModelRc::from(app.borrow().tx_model.clone()));
+        windows
             .sim_panel
             .set_sim_widgets(ModelRc::from(app.borrow().sim_model.clone()));
 
@@ -2379,15 +2383,18 @@ fn dynamic_periodic_config(a: &App, idx: usize) -> Option<DynamicPeriodicConfig>
 }
 
 fn stop_task_periodic(a: &App, task: &TxTask) {
-    let _ = a.cmd.send(Cmd::SetPeriodic {
-        handle: task.handle,
-        frame: tx_frame(task),
-        period_ms: 1,
-        repeat: task.repeat,
-        enable: false,
-    });
+    stop_periodic_handle(a, task.handle);
+}
+
+fn stop_periodic_handle(a: &App, handle: u64) {
+    let _ = a
+        .cmd
+        .send_critical(Cmd::StopPeriodic { handle }, Duration::from_millis(100));
+}
+
+fn clear_dynamic_periodic(a: &App, handle: u64) {
     let _ = a.cmd.send(Cmd::SetDynamicPeriodic {
-        handle: task.handle,
+        handle,
         config: None,
     });
 }
@@ -2407,15 +2414,17 @@ fn configure_task_periodic(a: &mut App, idx: usize) {
     let periodic = task.periodic;
     let dynamic = periodic && has_vary(task);
 
+    if !periodic {
+        stop_periodic_handle(a, handle);
+        return;
+    }
+
     if dynamic {
         let config = dynamic_periodic_config(a, idx);
         let _ = a.cmd.send(Cmd::SetDynamicPeriodic { handle, config });
     } else {
         let task = &a.txs[idx];
-        let _ = a.cmd.send(Cmd::SetDynamicPeriodic {
-            handle,
-            config: None,
-        });
+        clear_dynamic_periodic(a, handle);
         let _ = a.cmd.send(Cmd::SetPeriodic {
             handle,
             frame: tx_frame(task),

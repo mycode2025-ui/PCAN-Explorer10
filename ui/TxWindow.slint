@@ -75,8 +75,8 @@ export component TxWindow inherits ThemedWindow {
     property <length> list-count-w: 80px;
     property <length> list-period-w: 78px;
     property <length> list-sent-w: 50px;
-    property <length> list-action-w: 120px;
-    property <length> list-total-w: 1056px;
+    property <length> list-action-w: 90px;
+    property <length> list-total-w: 1026px;
     // Keep the file-send controls compact. A fixed, non-stretching left pane
     // also prevents long help text from pushing controls across its border.
     property <length> file-left-w: 430px;
@@ -294,7 +294,6 @@ export component TxWindow inherits ThemedWindow {
                                             spacing: 2px; padding: 2px;
                                             TBtn { h: 26px; boxed: true; text: I18n.en ? "Send" : "发"; clicked => { root.tx-send-once(i); } }
                                             TBtn { h: 26px; boxed: true; text: t.running ? (I18n.en ? "Stop" : "停") : (I18n.en ? "Cyclic" : "周期"); active: t.running; clicked => { root.tx-toggle-periodic(i); } }
-                                            TBtn { h: 26px; boxed: true; text: I18n.en ? "Del" : "删"; clicked => { root.tx-remove(i); } }
                                         }
                                     }
                                 }

@@ -4,7 +4,7 @@
 
 use crate::{
     App, AppWindow, TxByteCell, TxByteRow, TxRow, TxSigRow, TxTask, TxWindow, fmtf, id_str,
-    parse_tx_bytes, parse_u32, vary,
+    parse_tx_bytes, parse_u32, sync_vec_model, vary,
 };
 use slint::{Model, ModelRc, SharedString, VecModel};
 use std::rc::Rc;
@@ -573,12 +573,11 @@ pub(crate) fn tx_list_sig(a: &App) -> u64 {
     h.finish()
 }
 
-/// Rebuild and push the send-task list model to both windows, and record its signature.
-pub(crate) fn push_tx_list(a: &mut App, ui: &AppWindow, tx_window: &TxWindow) {
+/// Update the stable send-task model in place. Replacing the model while a row
+/// button is pressed destroys that button before mouse release and loses the click.
+pub(crate) fn push_tx_list(a: &mut App, _ui: &AppWindow, _tx_window: &TxWindow) {
     a.tx_list_cache = tx_list_sig(a);
-    let model = ModelRc::from(Rc::new(VecModel::from(build_tx_rows(a))));
-    ui.set_txs(model.clone());
-    tx_window.set_txs(model);
+    sync_vec_model(&a.tx_model, build_tx_rows(a));
 }
 
 /// Refresh the DBC-send page: the message-picker list (left, rebuilt only when the merged

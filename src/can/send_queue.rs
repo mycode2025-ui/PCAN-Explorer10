@@ -71,13 +71,7 @@ impl PendingSendJob {
                 data_increment,
             } => {
                 let frame = next.clone();
-                if *id_increment {
-                    let id_mask = if next.ext { 0x1FFF_FFFF } else { 0x7FF };
-                    next.id = next.id.wrapping_add(1) & id_mask;
-                }
-                if *data_increment {
-                    increment_frame_data(&mut next.data);
-                }
+                advance_sequence_frame(next, 1, *id_increment, *data_increment);
                 frame
             }
             PendingSendSource::Batch { frames, index } => {
@@ -91,12 +85,25 @@ impl PendingSendJob {
     }
 }
 
-pub(super) fn increment_frame_data(data: &mut [u8]) {
-    for byte in data {
-        let (value, carry) = byte.overflowing_add(1);
-        *byte = value;
-        if !carry {
-            break;
+pub(super) fn advance_sequence_frame(
+    frame: &mut CanFrame,
+    steps: u64,
+    id_increment: bool,
+    data_increment: bool,
+) {
+    if id_increment {
+        let id_mask = if frame.ext { 0x1FFF_FFFF } else { 0x7FF };
+        frame.id = frame.id.wrapping_add(steps as u32) & id_mask;
+    }
+    if data_increment {
+        let mut carry = steps;
+        for byte in &mut frame.data {
+            let sum = (*byte as u64) + (carry & 0xFF);
+            *byte = sum as u8;
+            carry = (carry >> 8) + (sum >> 8);
+            if carry == 0 {
+                break;
+            }
         }
     }
 }

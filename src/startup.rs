@@ -325,6 +325,7 @@ pub(super) fn main() -> Result<(), Box<dyn std::error::Error>> {
         tx_sig_cache: u64::MAX,
         tx_msgs_cache: u64::MAX,
         tx_list_cache: u64::MAX,
+        tx_model: Rc::new(VecModel::default()),
         tx_checked: HashSet::new(),
         tx_speed: 1.0,
         chan_names_cache: u64::MAX,
@@ -413,6 +414,7 @@ pub(super) fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     ui.set_msgs(ModelRc::from(app.borrow().msg_model.clone()));
+    ui.set_txs(ModelRc::from(app.borrow().tx_model.clone()));
     ui.set_logs(ModelRc::from(app.borrow().log_model.clone()));
     ui.set_console_lines(ModelRc::from(app.borrow().console_model.clone()));
     ui.set_dbc_signals(ModelRc::from(app.borrow().dbc_signal_model.clone()));

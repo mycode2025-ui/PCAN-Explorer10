@@ -818,6 +818,8 @@ fn wire_tx(
                     let total = (burst as u64) * (repeat as u64);
                     let cap = total.min(100_000); // 防误操作刷爆总线
                     let frame = tx_frame(&t);
+                    let mut next_seed = frame.clone();
+                    can::advance_send_sequence_seed(&mut next_seed, cap, id_inc, data_inc);
                     if a
                         .cmd
                         .send(Cmd::SendSequence {
@@ -828,6 +830,16 @@ fn wire_tx(
                         })
                         .is_ok()
                     {
+                        if (id_inc || data_inc)
+                            && let Some(w) = txw.upgrade()
+                        {
+                            if id_inc {
+                                w.set_tx_form_id(format!("{:X}", next_seed.id).into());
+                            }
+                            if data_inc {
+                                w.set_tx_form_data(next_seed.data_hex().into());
+                            }
+                        }
                         a.log(format!(
                             "发送任务: {} {} ×{}帧{}{}",
                             t.name,

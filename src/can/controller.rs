@@ -7,6 +7,9 @@ pub(super) fn controller(
     command_health: CommandHealth,
 ) {
     let start = Instant::now();
+    let waiter = PreciseWaiter::new();
+    let controller_tick = Duration::from_millis(1);
+    let mut next_controller_tick = start + controller_tick;
     let mut last_health_report = Instant::now();
     let mut hardware_overruns = 0u64;
     let mut hardware_errors = 0u64;
@@ -226,6 +229,9 @@ pub(super) fn controller(
                             periodics.remove(&handle);
                         }
                     }
+                    Cmd::StopPeriodic { handle } => {
+                        stop_periodic_jobs(&mut periodics, &mut dynamic_periodics, handle);
+                    }
                     Cmd::SetDynamicPeriodic { handle, config } => {
                         periodics.remove(&handle);
                         if let Some(config) = config.filter(|cfg| cfg.repeat != 0) {
@@ -419,7 +425,7 @@ pub(super) fn controller(
             let mut done: Vec<u64> = Vec::new();
             for (h, p) in periodics.iter_mut() {
                 if now >= p.next {
-                    p.next = now + p.period;
+                    p.next = advance_periodic_deadline(p.next, p.period, now);
                     let mut f = p.frame.clone();
                     f.t = start.elapsed().as_secs_f64();
                     f.tx = true;
@@ -470,10 +476,8 @@ pub(super) fn controller(
                 if now < periodic.next {
                     continue;
                 }
-                periodic.next += Duration::from_millis(periodic.config.period_ms.max(1));
-                if periodic.next <= now {
-                    periodic.next = now + Duration::from_millis(periodic.config.period_ms.max(1));
-                }
+                let period = Duration::from_millis(periodic.config.period_ms.max(1));
+                periodic.next = advance_periodic_deadline(periodic.next, period, now);
                 match build_dynamic_frame(*handle, periodic) {
                     Ok((frame, signal_values)) => {
                         due.push((*handle, frame, signal_values, periodic.sent + 1))
@@ -712,11 +716,48 @@ pub(super) fn controller(
                 );
                 last_health_report = Instant::now();
             }
-            std::thread::sleep(Duration::from_millis(1));
-        } else if pb_active {
-            std::thread::sleep(Duration::from_millis(1));
+        }
+
+        let realtime_active = running
+            || pb_active
+            || !periodics.is_empty()
+            || !dynamic_periodics.is_empty()
+            || !pending_sends.is_empty();
+        if realtime_active {
+            let now = Instant::now();
+            while next_controller_tick <= now {
+                next_controller_tick += controller_tick;
+            }
+            let mut wake_at = next_controller_tick;
+            for deadline in periodics
+                .values()
+                .map(|periodic| periodic.next)
+                .chain(dynamic_periodics.values().map(|periodic| periodic.next))
+            {
+                wake_at = wake_at.min(deadline);
+            }
+            waiter.wait_until(wake_at);
         } else {
+            next_controller_tick = Instant::now() + controller_tick;
             std::thread::sleep(Duration::from_millis(10));
         }
     }
+}
+
+pub(super) fn advance_periodic_deadline(
+    scheduled: Instant,
+    period: Duration,
+    now: Instant,
+) -> Instant {
+    let next = scheduled + period;
+    if next <= now { now + period } else { next }
+}
+
+pub(super) fn stop_periodic_jobs(
+    periodics: &mut HashMap<u64, Periodic>,
+    dynamic_periodics: &mut HashMap<u64, DynamicPeriodic>,
+    handle: u64,
+) {
+    periodics.remove(&handle);
+    dynamic_periodics.remove(&handle);
 }
