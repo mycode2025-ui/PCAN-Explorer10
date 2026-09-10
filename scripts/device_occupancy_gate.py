@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify a second PcanWork process cannot silently steal occupied CAN devices."""
+"""Verify a second PCAN-Explorer10 process cannot silently steal occupied CAN devices."""
 
 from __future__ import annotations
 

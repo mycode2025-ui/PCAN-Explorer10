@@ -758,7 +758,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 return;
             };
             let Some(path) = rfd::FileDialog::new()
-                .add_filter("PcanWork License", &["pcanlic"])
+                .add_filter("PCAN-Explorer10 License", &["pcanlic"])
                 .pick_file()
             else {
                 return;

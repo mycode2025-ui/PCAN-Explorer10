@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PcanWork four-channel hardware acceptance gate.
+"""PCAN-Explorer10 four-channel hardware acceptance gate.
 
 Verifies:
   * exactly four configured software channels open;

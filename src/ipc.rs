@@ -1,6 +1,6 @@
 //! Python 自动化测试的 IPC 服务端：TCP loopback (127.0.0.1) + NDJSON 协议。
 //!
-//! PcanWork 是服务端；外部 python.exe（运行用户测试脚本）作为客户端连接，驱动总线。
+//! PCAN-Explorer10 是服务端；外部 python.exe（运行用户测试脚本）作为客户端连接，驱动总线。
 //! 本模块**只用 Send 安全类型**（std + serde + crate::can/dbc 的克隆快照），绝不触碰
 //! App / Rc<RefCell> / 硬件：
 //!   - 只读操作（status/get_last/get_signal/decode/encode）在 handler 线程直接从

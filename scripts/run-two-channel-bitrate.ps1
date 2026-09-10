@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = "Stop"
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 if (-not $Executable) {
-    $Executable = Join-Path $workspace "target\debug\pcanwork.exe"
+    $Executable = Join-Path $workspace "target\debug\PCAN-Explorer10.exe"
 }
 $executable = (Resolve-Path -LiteralPath $Executable).Path
 if (-not $Report) {
@@ -32,7 +32,7 @@ try {
         Start-Sleep -Milliseconds 100
     }
     if (-not (Test-Path -LiteralPath $ipcInfo)) {
-        throw "PcanWork IPC startup timed out"
+        throw "PCAN-Explorer10 IPC startup timed out"
     }
     $connection = Get-Content -LiteralPath $ipcInfo
     # The main window performs its initial hardware identity scan immediately

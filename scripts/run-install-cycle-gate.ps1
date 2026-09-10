@@ -6,7 +6,7 @@ param(
     [string]$ExpectedVersion,
     [Parameter(Mandatory)]
     [switch]$ConfirmDestructiveInstallCycle,
-    [string]$InstallDirectory = (Join-Path $env:ProgramFiles 'PcanWork'),
+    [string]$InstallDirectory = (Join-Path $env:ProgramFiles 'PCAN-Explorer10'),
     [string]$ReleaseReport
 )
 
@@ -19,13 +19,13 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     throw 'The install-cycle gate must run in an elevated PowerShell process.'
 }
 if (-not $ConfirmDestructiveInstallCycle) {
-    throw 'Pass -ConfirmDestructiveInstallCycle explicitly; this gate uninstalls and reinstalls PcanWork.'
+    throw 'Pass -ConfirmDestructiveInstallCycle explicitly; this gate uninstalls and reinstalls PCAN-Explorer10.'
 }
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $installerPath = (Resolve-Path -LiteralPath $Installer).Path
 $install = [System.IO.Path]::GetFullPath($InstallDirectory)
-$expectedDefault = [System.IO.Path]::GetFullPath((Join-Path $env:ProgramFiles 'PcanWork'))
+$expectedDefault = [System.IO.Path]::GetFullPath((Join-Path $env:ProgramFiles 'PCAN-Explorer10'))
 if ($install -ne $expectedDefault) {
     throw "Refusing an unexpected install target: $install"
 }
@@ -34,7 +34,7 @@ $artifactDirectory = Join-Path $root (
 )
 New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
 
-$userDirectory = Join-Path $env:LOCALAPPDATA 'PcanWork'
+$userDirectory = Join-Path $env:LOCALAPPDATA 'PCAN-Explorer10'
 $settingsPath = Join-Path $userDirectory 'pcanwork_settings.json'
 $licensePath = Join-Path $userDirectory 'license.pcanlic'
 $settingsBackup = Join-Path $artifactDirectory 'pcanwork_settings.original.json'
@@ -74,14 +74,14 @@ function Invoke-Uninstaller {
         '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
     ) -Wait -PassThru -WindowStyle Hidden
     if ($process.ExitCode -ne 0) { throw "Uninstaller failed with exit code $($process.ExitCode)." }
-    if (Test-Path -LiteralPath (Join-Path $install 'pcanwork.exe')) {
-        throw 'Uninstall left pcanwork.exe behind.'
+    if (Test-Path -LiteralPath (Join-Path $install 'PCAN-Explorer10.exe')) {
+        throw 'Uninstall left PCAN-Explorer10.exe behind.'
     }
     $extension = [Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey('.pcprj')
     $className = if ($extension) { [string]$extension.GetValue('') } else { '' }
     if ($extension) { $extension.Dispose() }
-    if ($className -eq 'PcanWork.Project') {
-        throw 'Uninstall left the PcanWork .pcprj association behind.'
+    if ($className -eq 'PCAN-Explorer10.Project') {
+        throw 'Uninstall left the PCAN-Explorer10 .pcprj association behind.'
     }
 }
 
@@ -115,7 +115,7 @@ try {
     $completed = $true
 }
 finally {
-    if (-not (Test-Path -LiteralPath (Join-Path $install 'pcanwork.exe') -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $install 'PCAN-Explorer10.exe') -PathType Leaf)) {
         Write-Warning 'Restoring the installed application after an interrupted gate.'
         Invoke-Installer @(
             '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS',

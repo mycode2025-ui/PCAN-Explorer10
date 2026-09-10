@@ -298,7 +298,7 @@ pub fn write_asc(path: &str, frames: &[CanFrame]) -> Result<(), String> {
     use std::io::Write;
     let f = std::fs::File::create(path).map_err(|e| format!("创建失败: {e}"))?;
     let mut w = std::io::BufWriter::new(f);
-    writeln!(w, "date converted by PcanWork").map_err(|e| e.to_string())?;
+    writeln!(w, "date converted by PCAN-Explorer10").map_err(|e| e.to_string())?;
     writeln!(w, "base hex  timestamps absolute").map_err(|e| e.to_string())?;
     for fr in frames {
         let idtxt = if fr.ext {

@@ -1,6 +1,6 @@
-# PcanWork product remediation audit
+# PCAN-Explorer10 product remediation audit
 
-This document is the completion checklist for PcanWork, Modbus Tools, and
+This document is the completion checklist for PCAN-Explorer10, Modbus Tools, and
 Serial Tool. A row is complete only when the implementation and the evidence
 gate both pass. “Implemented” alone is not release evidence.
 

@@ -1,6 +1,6 @@
-# PcanWork 离线授权
+# PCAN-Explorer10 离线授权
 
-PcanWork 与 Modbus Tools 共用同一份离线授权。未授权时，每次启动提供 60 分钟试用；倒计时结束后程序自动退出。Serial Tool 不受此授权限制。
+PCAN-Explorer10 与 Modbus Tools 共用同一份离线授权。未授权时，每次启动提供 60 分钟试用；倒计时结束后程序自动退出。Serial Tool 不受此授权限制。
 
 ## 签发 `.pcanlic`
 
@@ -45,15 +45,15 @@ powershell -ExecutionPolicy Bypass -File .\tools\sign-license.ps1 `
 
 ## 客户端导入
 
-1. 在 PcanWork 或 Modbus Tools 顶部点击试用倒计时。
+1. 在 PCAN-Explorer10 或 Modbus Tools 顶部点击试用倒计时。
 2. 复制机器码并交给授权管理员。
 3. 收到 `.pcanlic` 后点击“导入授权文件”。
-4. 验证通过后文件安装到 `%LOCALAPPDATA%\PcanWork\license.pcanlic`，两款软件立即共用。
+4. 验证通过后文件安装到 `%LOCALAPPDATA%\PCAN-Explorer10\license.pcanlic`，两款软件立即共用。
 
 客户端只内置经过掩码处理的 Ed25519 公钥，不能生成新授权。授权绑定 CPU 机器码，可限制产品、功能和到期时间；修改载荷、签名或机器码都会导致验证失败。
 
 ## Release 完整性
 
-Release 构建启用 LTO、单代码生成单元、符号删除与 `panic=abort`。发布时使用同一外部私钥分别签发 `pcanwork.exe.integrity` 和 `modbus-tools.exe.integrity`；程序启动时校验签名、产品、版本、文件名和 exe 的 SHA-256，不匹配时拒绝启动。
+Release 构建启用 LTO、单代码生成单元、符号删除与 `panic=abort`。发布时使用同一外部私钥分别签发 `PCAN-Explorer10.exe.integrity` 和 `modbus-tools.exe.integrity`；程序启动时校验签名、产品、版本、文件名和 exe 的 SHA-256，不匹配时拒绝启动。
 
 旧 HMAC 密码签发方式已停用，`scripts\generate-modbus-password.ps1` 会直接报错，避免误发旧授权。

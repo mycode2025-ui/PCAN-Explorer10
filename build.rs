@@ -12,7 +12,7 @@ fn main() {
         use embed_manifest::manifest::DpiAwareness;
         use embed_manifest::{embed_manifest, new_manifest};
 
-        embed_manifest(new_manifest("PcanWork").dpi_awareness(DpiAwareness::System))
+        embed_manifest(new_manifest("PCAN-Explorer10").dpi_awareness(DpiAwareness::System))
             .expect("Failed to embed Windows application manifest");
 
         // Embed the executable icon for File Explorer and pinned taskbar shortcuts.

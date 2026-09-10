@@ -1,5 +1,5 @@
 //! 配置持久化：保存后与退出时写入、启动时恢复。
-//! 安装版存于 `%LOCALAPPDATA%\PcanWork\pcanwork_settings.json`，避免 Program Files 写权限问题。
+//! 安装版存于 `%LOCALAPPDATA%\PCAN-Explorer10\pcanwork_settings.json`，避免 Program Files 写权限问题。
 
 use crate::can::DeviceConfig;
 use serde::{Deserialize, Serialize};
@@ -118,12 +118,18 @@ fn settings_path() -> PathBuf {
 
 fn settings_path_from(local_app_data: Option<PathBuf>, executable: Option<PathBuf>) -> PathBuf {
     if let Some(base) = local_app_data {
-        return base.join("PcanWork").join("pcanwork_settings.json");
+        return base.join("PCAN-Explorer10").join("pcanwork_settings.json");
     }
     executable
         .and_then(|path| path.parent().map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("."))
         .join("pcanwork_settings.json")
+}
+
+fn legacy_product_settings_path() -> Option<PathBuf> {
+    std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .map(|base| base.join("PcanWork").join("pcanwork_settings.json"))
 }
 
 fn legacy_settings_path() -> PathBuf {
@@ -144,14 +150,18 @@ pub fn load() -> Option<Settings> {
         return Some(settings);
     }
 
-    // 兼容旧版便携运行：首次升级时读取 exe 目录配置，并迁移到用户目录。
-    let legacy = legacy_settings_path();
-    if legacy != current
-        && let Ok(text) = std::fs::read_to_string(legacy)
-        && let Ok(settings) = serde_json::from_str::<Settings>(&text)
+    // 品牌升级和旧版便携运行都只迁移一次，随后写入新产品目录。
+    for legacy in [legacy_product_settings_path(), Some(legacy_settings_path())]
+        .into_iter()
+        .flatten()
     {
-        let _ = save(&settings);
-        return Some(settings);
+        if legacy != current
+            && let Ok(text) = std::fs::read_to_string(legacy)
+            && let Ok(settings) = serde_json::from_str::<Settings>(&text)
+        {
+            let _ = save(&settings);
+            return Some(settings);
+        }
     }
     None
 }
@@ -178,11 +188,13 @@ mod tests {
     fn installed_settings_use_local_app_data_instead_of_executable_directory() {
         let path = settings_path_from(
             Some(PathBuf::from(r"C:\Users\tester\AppData\Local")),
-            Some(PathBuf::from(r"C:\Program Files\PcanWork\pcanwork.exe")),
+            Some(PathBuf::from(
+                r"C:\Program Files\PCAN-Explorer10\PCAN-Explorer10.exe",
+            )),
         );
         assert_eq!(
             path,
-            PathBuf::from(r"C:\Users\tester\AppData\Local\PcanWork\pcanwork_settings.json")
+            PathBuf::from(r"C:\Users\tester\AppData\Local\PCAN-Explorer10\pcanwork_settings.json")
         );
     }
 

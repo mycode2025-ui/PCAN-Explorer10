@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 r"""
-PcanWork Python 自动化测试帮助
+PCAN-Explorer10 Python 自动化测试帮助
 =============================
 
 一、这个功能能做什么
 --------------------
 
-Python 脚本运行器把 PcanWork 的 CAN/CAN FD 能力开放给普通 Python 脚本。
-脚本通过本机 IPC 与当前 PcanWork 通信，不直接加载硬件驱动，因此可以：
+Python 脚本运行器把 PCAN-Explorer10 的 CAN/CAN FD 能力开放给普通 Python 脚本。
+脚本通过本机 IPC 与当前 PCAN-Explorer10 通信，不直接加载硬件驱动，因此可以：
 
 1. 使用电脑上已经安装的 Python 3.7 或更高版本，不需要 pip 安装 pcanwork。
 2. 运行单个 .py 测试，或者按文件名顺序运行一个目录中的全部测试。
 3. 使用主界面已配置的 CAN 通道，或者在脚本中指定设备和通道。
-4. 使用 PCAN、ZLG、GCAN、创芯科技等 PcanWork 已适配的设备。
+4. 使用 PCAN、ZLG、GCAN、创芯科技等 PCAN-Explorer10 已适配的设备。
 5. 控制多设备、多通道、经典 CAN、扩展帧、CAN FD、BRS 和远程帧。
 6. 单帧发送、批量发送、周期发送、停止周期任务并读取发送结果。
 7. 等待指定报文、读取最新报文、按条件等待报文并处理超时。
 8. 加载 DBC、查询报文和信号、编码物理值、解码数据、等待信号条件。
-9. 读取 PcanWork 运行日志和 printf-over-CAN 文本日志。
+9. 读取 PCAN-Explorer10 运行日志和 printf-over-CAN 文本日志。
 10. 使用 PASS/FAIL 断言、测试汇总、退出码和目录测试套件。
 
 二、运行前准备
@@ -31,7 +31,7 @@ Python 脚本运行器把 PcanWork 的 CAN/CAN FD 能力开放给普通 Python �
 5. 从安装目录 templates 复制一个示例到工作目录再修改，不建议直接修改模板。
 
 运行器会自动设置 PCANWORK_IPC_PORT、PCANWORK_IPC_TOKEN、
-PCANWORK_CLIENT_DIR 和 PYTHONPATH。依赖 PcanWork 的测试必须从本运行器启动；
+PCANWORK_CLIENT_DIR 和 PYTHONPATH。依赖 PCAN-Explorer10 的测试必须从本运行器启动；
 直接在命令行运行时没有 IPC 端口和令牌，会连接失败。
 
 三、最快的第一次测试
@@ -240,7 +240,7 @@ DBC 信号名称区分大小写。信号不存在时先用 dbc_info() 或 signal
     text = can.console_text()
     can.assert_true("BOOT OK" in text, "单片机启动日志")
 
-id=-1 表示任意 ID，ch=0 表示任意通道。脚本读取的是 PcanWork 已重组的文本，
+id=-1 表示任意 ID，ch=0 表示任意通道。脚本读取的是 PCAN-Explorer10 已重组的文本，
 不是原始 CAN 字节。
 
 十、运行测试套件
@@ -261,7 +261,7 @@ id=-1 表示任意 ID，ch=0 表示任意通道。脚本读取的是 PcanWork �
 --------------
 
 “PCANWORK_IPC_PORT not set”
-    脚本不是从 PcanWork Python 运行器启动，请回到 PcanWork 中运行。
+    脚本不是从 PCAN-Explorer10 Python 运行器启动，请回到 PCAN-Explorer10 中运行。
 
 “解释器校验失败”
     重新检测 Python，或浏览到真实 python.exe，不要选择 pythonw.exe。
@@ -305,7 +305,7 @@ DBC：load_dbc、dbc_info、dbc_diagnostics、signals_of、encode、decode、sig
 
 def main() -> int:
     """打印帮助；不连接、不启动也不发送任何 CAN 报文。"""
-    print(__doc__ or "PcanWork Python help is unavailable.")
+    print(__doc__ or "PCAN-Explorer10 Python help is unavailable.")
     return 0
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wait until PcanWork reports a deliberately disabled USB CAN adapter."""
+"""Wait until PCAN-Explorer10 reports a deliberately disabled USB CAN adapter."""
 
 from __future__ import annotations
 

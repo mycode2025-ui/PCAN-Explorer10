@@ -15,8 +15,8 @@ if (-not $ConfirmBusOffFaultInjection) {
     throw 'Pass -ConfirmBusOffFaultInjection; this gate deliberately creates CAN bus errors.'
 }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$executable = Join-Path $root 'target\debug\pcanwork.exe'
-$settingsPath = Join-Path $env:LOCALAPPDATA 'PcanWork\pcanwork_settings.json'
+$executable = Join-Path $root 'target\debug\PCAN-Explorer10.exe'
+$settingsPath = Join-Path $env:LOCALAPPDATA 'PCAN-Explorer10\pcanwork_settings.json'
 $evidence = Join-Path $root ('artifacts\bus-off\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Force -Path $evidence | Out-Null
 $backup = Join-Path $evidence 'pcanwork_settings.original.json'
@@ -40,7 +40,7 @@ function Start-IpcApplication([string]$Name) {
     }
     if (-not (Test-Path -LiteralPath $ipc)) {
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-        throw "PcanWork $Name IPC startup timed out."
+        throw "PCAN-Explorer10 $Name IPC startup timed out."
     }
     [pscustomobject]@{ Process = $process; Connection = @(Get-Content -LiteralPath $ipc) }
 }

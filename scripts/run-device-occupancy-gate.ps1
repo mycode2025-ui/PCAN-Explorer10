@@ -9,7 +9,7 @@ New-Item -ItemType Directory -Force -Path $directory | Out-Null
 $ipcInfo = Join-Path $directory 'ipc.txt'
 if (Test-Path -LiteralPath $ipcInfo) { Remove-Item -LiteralPath $ipcInfo -Force }
 $env:PCANWORK_IPC_INFO_FILE = $ipcInfo
-$application = Start-Process -FilePath (Join-Path $root 'target\debug\pcanwork.exe') `
+$application = Start-Process -FilePath (Join-Path $root 'target\debug\PCAN-Explorer10.exe') `
     -PassThru -WindowStyle Hidden
 try {
     for ($attempt = 0; $attempt -lt 150 -and -not (Test-Path -LiteralPath $ipcInfo); $attempt++) {

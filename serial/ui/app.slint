@@ -9,7 +9,7 @@ export global I18n {
     }
 }
 
-// 与 PcanWork 统一: 学术蓝(Academic Blue) 浅色配色
+// 与 PCAN-Explorer10 统一: 学术蓝(Academic Blue) 浅色配色
 global Theme {
     in-out property <bool> dark: ProductDesign.dark;
     changed dark => { ProductDesign.dark = dark; }
@@ -149,7 +149,7 @@ component QuickCommandRow inherits Rectangle {
     }
 }
 
-// Academic-blue button matching PcanWork (std Button follows the system accent, so we draw our own).
+// Academic-blue button matching PCAN-Explorer10 (std Button follows the system accent, so we draw our own).
 component AccentBtn inherits Rectangle {
     in property <string> text;
     in property <bool> filled: true;       // true = accent fill, false = outlined

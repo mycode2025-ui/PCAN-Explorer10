@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$InstallDirectory = (Join-Path $env:ProgramFiles 'PcanWork'),
+    [string]$InstallDirectory = (Join-Path $env:ProgramFiles 'PCAN-Explorer10'),
     [string]$ExpectedVersion,
     [string]$ReleaseReport,
     [string]$ReleaseDirectory,
@@ -27,7 +27,7 @@ function Assert-ProductCheck([string]$Name, [bool]$Condition, [string]$Detail) {
 }
 
 $requiredFiles = @(
-    'pcanwork.exe', 'pcanwork.exe.integrity', 'serial-tool.exe',
+    'PCAN-Explorer10.exe', 'PCAN-Explorer10.exe.integrity', 'serial-tool.exe',
     'modbus-tools.exe', 'modbus-tools.exe.integrity', 'zlgcan.dll',
     'kerneldlls\CANDevCore.dll', 'kerneldlls\CANDevice.dll',
     'kerneldlls\USBCAN_E_64.dll', 'kerneldlls\USBCANFD.dll',
@@ -42,7 +42,7 @@ foreach ($relative in $requiredFiles) {
     Assert-ProductCheck "Installed file $relative" (Test-Path -LiteralPath $path -PathType Leaf) $path
 }
 
-foreach ($name in @('pcanwork.exe', 'serial-tool.exe', 'modbus-tools.exe')) {
+foreach ($name in @('PCAN-Explorer10.exe', 'serial-tool.exe', 'modbus-tools.exe')) {
     $path = Join-Path $install $name
     $actual = (Get-Item -LiteralPath $path).VersionInfo.FileVersion
     Assert-ProductCheck "Version $name" ($actual -eq $ExpectedVersion) "expected=$ExpectedVersion actual=$actual"
@@ -51,7 +51,7 @@ foreach ($name in @('pcanwork.exe', 'serial-tool.exe', 'modbus-tools.exe')) {
 if ($ReleaseDirectory) {
     $releaseDirectoryPath = [System.IO.Path]::GetFullPath($ReleaseDirectory)
     foreach ($name in @(
-        'pcanwork.exe', 'pcanwork.exe.integrity', 'serial-tool.exe',
+        'PCAN-Explorer10.exe', 'PCAN-Explorer10.exe.integrity', 'serial-tool.exe',
         'modbus-tools.exe', 'modbus-tools.exe.integrity'
     )) {
         $installedPath = Join-Path $install $name
@@ -76,7 +76,7 @@ if ($ReleaseReport) {
     }
     foreach ($entry in $releaseEntries) {
         $name = [System.IO.Path]::GetFileName([string]$entry.File)
-        if ($name -eq ('PcanWork-Setup-' + $ExpectedVersion + '.exe')) { continue }
+        if ($name -eq ('PCAN-Explorer10-Setup-' + $ExpectedVersion + '.exe')) { continue }
         $installedPath = Join-Path $install $name
         if (Test-Path -LiteralPath $installedPath -PathType Leaf) {
             $expectedHash = if ($entry.PSObject.Properties.Name -contains 'SHA256') {
@@ -91,14 +91,14 @@ if ($ReleaseReport) {
 $extension = [Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey('.pcprj')
 $className = if ($extension) { [string]$extension.GetValue('') } else { '' }
 if ($extension) { $extension.Dispose() }
-Assert-ProductCheck 'Project extension class' ($className -eq 'PcanWork.Project') "actual=$className"
+Assert-ProductCheck 'Project extension class' ($className -eq 'PCAN-Explorer10.Project') "actual=$className"
 
 $commandKey = [Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey(
-    'PcanWork.Project\shell\open\command'
+    'PCAN-Explorer10.Project\shell\open\command'
 )
 $openCommand = if ($commandKey) { [string]$commandKey.GetValue('') } else { '' }
 if ($commandKey) { $commandKey.Dispose() }
-$expectedExecutable = Join-Path $install 'pcanwork.exe'
+$expectedExecutable = Join-Path $install 'PCAN-Explorer10.exe'
 Assert-ProductCheck 'Project open command executable' (
     $openCommand.Contains('"' + $expectedExecutable + '"') -and $openCommand.Contains('"%1"')
 ) $openCommand
@@ -109,7 +109,7 @@ $uninstallEntries = @(
 ) | ForEach-Object { Get-ItemProperty $_ -ErrorAction SilentlyContinue } |
     Where-Object {
         $_.PSObject.Properties.Name -contains 'DisplayName' -and
-        $_.DisplayName -like 'PcanWork*'
+        $_.DisplayName -like 'PCAN-Explorer10*'
     }
 $matchingUninstall = @($uninstallEntries) | Where-Object {
     $_.PSObject.Properties.Name -contains 'DisplayVersion' -and
@@ -119,10 +119,10 @@ $matchingUninstall = @($uninstallEntries) | Where-Object {
     [System.IO.Path]::GetFullPath($_.InstallLocation.TrimEnd('\')) -eq $install.TrimEnd('\')
 }
 Assert-ProductCheck 'Uninstall registration' (@($matchingUninstall).Count -ge 1) (
-    "PcanWork version=$ExpectedVersion install=$install"
+    "PCAN-Explorer10 version=$ExpectedVersion install=$install"
 )
 
-$settingsPath = Join-Path $env:LOCALAPPDATA 'PcanWork\pcanwork_settings.json'
+$settingsPath = Join-Path $env:LOCALAPPDATA 'PCAN-Explorer10\pcanwork_settings.json'
 if ($ExpectedRecentProject) {
     $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
     $recent = @($settings.recent_project_paths)

@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$executable = Join-Path $workspace "target\debug\pcanwork.exe"
+$executable = Join-Path $workspace "target\debug\PCAN-Explorer10.exe"
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 if (-not $Report) {
     $Report = Join-Path $workspace "artifacts\hardware-soak\$stamp\report.json"
@@ -22,7 +22,7 @@ try {
         Start-Sleep -Milliseconds 100
     }
     if (-not (Test-Path -LiteralPath $ipcInfo)) {
-        throw "PcanWork IPC startup timed out"
+        throw "PCAN-Explorer10 IPC startup timed out"
     }
     $connection = Get-Content -LiteralPath $ipcInfo
     python (Join-Path $workspace "scripts\hardware_soak_gate.py") `

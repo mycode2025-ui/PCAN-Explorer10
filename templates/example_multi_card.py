@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """example_multi_card.py — drive MULTIPLE CAN cards from one test.
 
-Run from PcanWork's Script Runner ("Python测试" → Run). Exit 0 = PASS (green).
+Run from PCAN-Explorer10's Script Runner ("Python测试" → Run). Exit 0 = PASS (green).
 
 This shows real multi-card operation: open several cards/channels at once and
 send DIFFERENT traffic on each, routed by the sw_channel you assign. Defaults to

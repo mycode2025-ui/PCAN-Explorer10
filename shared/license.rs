@@ -118,12 +118,25 @@ pub(crate) fn install_license(source: &Path, product: &str) -> Result<LicensePay
 }
 
 pub(crate) fn verify_installed(product: &str, feature: &str) -> Result<LicensePayload, String> {
-    let text = std::fs::read_to_string(installed_license_path())
+    let current = installed_license_path();
+    let text = std::fs::read_to_string(&current)
+        .or_else(|_| std::fs::read_to_string(legacy_installed_license_path()))
         .map_err(|_| "license file not installed".to_string())?;
     verify_license_text(&text, product, feature)
 }
 
 pub(crate) fn installed_license_path() -> PathBuf {
+    if let Some(base) = std::env::var_os("LOCALAPPDATA") {
+        return PathBuf::from(base).join("PCAN-Explorer10").join("license.pcanlic");
+    }
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("license.pcanlic")
+}
+
+fn legacy_installed_license_path() -> PathBuf {
     if let Some(base) = std::env::var_os("LOCALAPPDATA") {
         return PathBuf::from(base).join("PcanWork").join("license.pcanlic");
     }

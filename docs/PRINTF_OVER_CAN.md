@@ -1,9 +1,9 @@
-# PcanWork printf-over-CAN 单片机接入指南
+# PCAN-Explorer10 printf-over-CAN 单片机接入指南
 
 ## 1. 用途
 
 printf-over-CAN 用一个保留的 CAN 报文 ID，把单片机的调试文本发送到
-PcanWork 主界面的“CAN 文本日志”控制台。它适合启动日志、状态量和故障定位，
+PCAN-Explorer10 主界面的“CAN 文本日志”控制台。它适合启动日志、状态量和故障定位，
 不用于需要确认、重传或严格时序的业务数据。
 
 ## 2. 上位机设置
@@ -20,7 +20,7 @@ DBC、诊断和网关配置，避免与现有报文冲突。不要直接占用�
 
 ## 3. 线级协议
 
-- 方向：MCU → PcanWork。
+- 方向：MCU → PCAN-Explorer10。
 - 载荷：原始文本字节，推荐 UTF-8；ASCII 是 UTF-8 的子集。
 - `LF`（`0x0A`）结束一行。
 - `CR`（`0x0D`）被忽略，因此 `\n` 和 `\r\n` 都可使用。
@@ -262,7 +262,7 @@ bool board_can_try_send(uint32_t id,
 }
 ```
 
-将 `CAN_LOG_USE_FD` 改为 `1`。PcanWork 通道的仲裁域和数据域波特率必须与
+将 `CAN_LOG_USE_FD` 改为 `1`。PCAN-Explorer10 通道的仲裁域和数据域波特率必须与
 MCU 一致。总线上如果存在不支持 CAN FD 的节点，必须确认这些节点具有
 FD-tolerant 能力，或继续使用经典 CAN 日志。
 
@@ -279,7 +279,7 @@ FD-tolerant 能力，或继续使用经典 CAN 日志。
 ## 8. 联调验收
 
 1. MCU 先每秒发送一次 `printf("CAN_LOG_TEST %lu\r\n", counter++)`。
-2. PcanWork 确认通道已连接、测量已启动，报文表能看到配置的日志 ID。
+2. PCAN-Explorer10 确认通道已连接、测量已启动，报文表能看到配置的日志 ID。
 3. 打开 CAN 文本日志，填写相同 ID 和通道，启用捕获。
 4. 确认计数连续、中文 UTF-8 文本正常、长行能跨帧拼接。
 5. 分别验证 `\n`、`\r\n`、无换行后手动 `can_log_flush()`。

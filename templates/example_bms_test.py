@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""example_bms_test.py — a complete PcanWork automation test (single card).
+"""example_bms_test.py — a complete PCAN-Explorer10 automation test (single card).
 
-Run from PcanWork's Script Runner ("Python测试" → Run). Exit 0 = PASS (green),
+Run from PCAN-Explorer10's Script Runner ("Python测试" → Run). Exit 0 = PASS (green),
 non-zero = FAIL (red). Plain Python — loops, ifs, asserts.
 
 THE SCRIPT DEFINES THE DEVICE AND DBC (the runner only picks the interpreter +

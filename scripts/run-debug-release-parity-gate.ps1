@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$DebugExecutable = 'D:\_Xcharge\Pcanwork\target\debug\pcanwork.exe',
-    [string]$ReleaseExecutable = 'C:\Program Files\PcanWork\pcanwork.exe',
+    [string]$DebugExecutable = 'D:\_Xcharge\Pcanwork\target\debug\PCAN-Explorer10.exe',
+    [string]$ReleaseExecutable = 'C:\Program Files\PCAN-Explorer10\PCAN-Explorer10.exe',
     [string]$Dbc = 'C:\Users\XCHARGE-2026Q1-LT08\Desktop\EU_HVBOXCheck\HVBoxCheck_EU.dbc'
 )
 

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """真实硬件多卡测试: PCAN(经典 CAN) + USBCANFD-200U(CAN FD) 同时打开。
 
-通过 IPC 直连正在运行的 PcanWork(端口/token 由 PCANWORK_IPC_PORT/TOKEN 环境变量给出)。
+通过 IPC 直连正在运行的 PCAN-Explorer10(端口/token 由 PCANWORK_IPC_PORT/TOKEN 环境变量给出)。
 验证三件事:
   1. 两张卡作为独立软件通道 CAN1 / CAN2 同时连上(connected)。
   2. 逐通道存活: 在 CAN1 发经典帧、在 CAN2 发 FD 帧, 各自回显应带本通道号

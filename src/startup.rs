@@ -7,7 +7,7 @@ pub(super) fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Err(error) = license::verify_self_integrity("pcanwork", product_version::current()) {
         rfd::MessageDialog::new()
-            .set_title("PcanWork")
+            .set_title("PCAN-Explorer10")
             .set_description(format!("程序完整性验证失败，软件无法启动。\n\nApplication integrity verification failed.\n\n{error}"))
             .set_level(rfd::MessageLevel::Error)
             .show();
@@ -75,7 +75,7 @@ pub(super) fn main() -> Result<(), Box<dyn std::error::Error>> {
         ui.on_license_import(move || {
             let Some(window) = weak.upgrade() else { return };
             let Some(path) = rfd::FileDialog::new()
-                .add_filter("PcanWork License", &["pcanlic"])
+                .add_filter("PCAN-Explorer10 License", &["pcanlic"])
                 .set_parent(&window.window().window_handle())
                 .pick_file()
             else {

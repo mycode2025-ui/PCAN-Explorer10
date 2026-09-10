@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """run_suite.py — run every *.py test in a folder and aggregate pass/fail.
 
-Launched by PcanWork's "运行套件 / Run folder" button (folder passed via env
+Launched by PCAN-Explorer10's "运行套件 / Run folder" button (folder passed via env
 PCANWORK_SUITE_DIR). Can also be run directly:  python run_suite.py [FOLDER]
 (defaults to this file's own folder).
 

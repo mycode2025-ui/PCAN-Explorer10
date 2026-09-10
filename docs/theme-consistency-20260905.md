@@ -17,6 +17,6 @@
 - 通道配置 150% 渲染、按钮 200% 渲染及紧凑模式夹具。不是实际切换 Windows 显示器 DPI 的交互测试。
 - 图像与夹具位于 artifacts/theme-review；未连接硬件、未执行安装或版本更新。
 - 原生窗口重开、键盘/屏幕阅读器实际事件及多显示器拖动尚未人工验证；不能将静态渲染视为这些交互测试通过。
-- Rust 回归：`cargo test -p pcanwork --bin pcanwork`，54 通过、0 失败、1 联网测试按原设置忽略；测试构建 3 分 50 秒，执行 2.95 秒。
+- Rust 回归：`cargo test -p pcanwork --bin PCAN-Explorer10`，54 通过、0 失败、1 联网测试按原设置忽略；测试构建 3 分 50 秒，执行 2.95 秒。
 - `cargo check -p modbus-tools -p serial-tool` 通过，51.98 秒。本轮涉及共享 UI，以上为开发/测试构建时间，不是 Release 安装包耗时。
 - 最后一次微调后的三程序联合 `cargo check -p pcanwork -p modbus-tools -p serial-tool` 通过，2 分 32 秒。

@@ -4,6 +4,10 @@ version = "0.3.2"
 edition = "2024"
 rust-version = "1.88"
 
+[[bin]]
+name = "PCAN-Explorer10"
+path = "src/main.rs"
+
 # 工作区：pcanwork（本包）+ serial（串口工具）+ modbus（Modbus 工具）。
 # 一次构建产出多个独立 exe，不打包进同一个程序。
 [workspace]

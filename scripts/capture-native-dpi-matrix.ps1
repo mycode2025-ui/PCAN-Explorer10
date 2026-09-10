@@ -10,11 +10,11 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $output = [System.IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 Add-Type -AssemblyName System.Drawing
-if (-not ('PcanWorkNativeDpi.WindowCapture' -as [type])) {
+if (-not ('PcanExplorer10NativeDpi.WindowCapture' -as [type])) {
     Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-namespace PcanWorkNativeDpi {
+namespace PcanExplorer10NativeDpi {
     public static class WindowCapture {
         private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
         [StructLayout(LayoutKind.Sequential)]
@@ -51,10 +51,10 @@ namespace PcanWorkNativeDpi {
 function Resize-ClientArea([IntPtr]$Handle, [int]$TargetWidth, [int]$TargetHeight) {
     # SetWindowPos sizes the complete native window. Compensate for the current
     # non-client frame so the Slint client area has the requested pixel size.
-    $windowRect = [PcanWorkNativeDpi.WindowCapture+Rect]::new()
-    $clientRect = [PcanWorkNativeDpi.WindowCapture+Rect]::new()
-    if (-not [PcanWorkNativeDpi.WindowCapture]::GetWindowRect($Handle, [ref]$windowRect) -or
-        -not [PcanWorkNativeDpi.WindowCapture]::GetClientRect($Handle, [ref]$clientRect)) {
+    $windowRect = [PcanExplorer10NativeDpi.WindowCapture+Rect]::new()
+    $clientRect = [PcanExplorer10NativeDpi.WindowCapture+Rect]::new()
+    if (-not [PcanExplorer10NativeDpi.WindowCapture]::GetWindowRect($Handle, [ref]$windowRect) -or
+        -not [PcanExplorer10NativeDpi.WindowCapture]::GetClientRect($Handle, [ref]$clientRect)) {
         throw 'Unable to measure native window before resizing.'
     }
     $frameWidth = ($windowRect.Right - $windowRect.Left) - ($clientRect.Right - $clientRect.Left)
@@ -62,13 +62,13 @@ function Resize-ClientArea([IntPtr]$Handle, [int]$TargetWidth, [int]$TargetHeigh
     $flags = 0x0004 -bor 0x0010 # SWP_NOZORDER | SWP_NOACTIVATE
     # Keep verification windows outside the visible desktop. PrintWindow can
     # still capture them, while Release builds no longer flash 18 test windows.
-    if (-not [PcanWorkNativeDpi.WindowCapture]::SetWindowPos(
+    if (-not [PcanExplorer10NativeDpi.WindowCapture]::SetWindowPos(
         $Handle, [IntPtr]::Zero, -32000, -32000, $TargetWidth + $frameWidth, $TargetHeight + $frameHeight, $flags)) {
         throw 'SetWindowPos failed while preparing the DPI viewport.'
     }
     Start-Sleep -Milliseconds 250
-    $actual = [PcanWorkNativeDpi.WindowCapture+Rect]::new()
-    if (-not [PcanWorkNativeDpi.WindowCapture]::GetClientRect($Handle, [ref]$actual)) {
+    $actual = [PcanExplorer10NativeDpi.WindowCapture+Rect]::new()
+    if (-not [PcanExplorer10NativeDpi.WindowCapture]::GetClientRect($Handle, [ref]$actual)) {
         throw 'Unable to measure native window after resizing.'
     }
     $actualWidth = $actual.Right - $actual.Left
@@ -79,8 +79,8 @@ function Resize-ClientArea([IntPtr]$Handle, [int]$TargetWidth, [int]$TargetHeigh
 }
 
 function Capture-Window([IntPtr]$Handle, [string]$Path) {
-    $rect = [PcanWorkNativeDpi.WindowCapture+Rect]::new()
-    if (-not [PcanWorkNativeDpi.WindowCapture]::GetWindowRect($Handle, [ref]$rect)) {
+    $rect = [PcanExplorer10NativeDpi.WindowCapture+Rect]::new()
+    if (-not [PcanExplorer10NativeDpi.WindowCapture]::GetWindowRect($Handle, [ref]$rect)) {
         throw 'GetWindowRect failed.'
     }
     $width = $rect.Right - $rect.Left
@@ -92,7 +92,7 @@ function Capture-Window([IntPtr]$Handle, [string]$Path) {
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     $hdc = $graphics.GetHdc()
     try {
-        if (-not [PcanWorkNativeDpi.WindowCapture]::PrintWindow($Handle, $hdc, 2)) {
+        if (-not [PcanExplorer10NativeDpi.WindowCapture]::PrintWindow($Handle, $hdc, 2)) {
             throw 'PrintWindow failed.'
         }
     }
@@ -109,7 +109,7 @@ function Capture-Window([IntPtr]$Handle, [string]$Path) {
     [pscustomobject]@{
         width = $width
         height = $height
-        dpi = [PcanWorkNativeDpi.WindowCapture]::GetDpiForWindow($Handle)
+        dpi = [PcanExplorer10NativeDpi.WindowCapture]::GetDpiForWindow($Handle)
     }
 }
 
@@ -141,10 +141,10 @@ try {
                 $handle = [IntPtr]::Zero
                 for ($attempt = 0; $attempt -lt 100 -and $handle -eq [IntPtr]::Zero; $attempt++) {
                     Start-Sleep -Milliseconds 100
-                    $candidate = [PcanWorkNativeDpi.WindowCapture]::FindLargestWindow($process.Id)
+                    $candidate = [PcanExplorer10NativeDpi.WindowCapture]::FindLargestWindow($process.Id)
                     if ($candidate -ne [IntPtr]::Zero) {
-                        $rect = [PcanWorkNativeDpi.WindowCapture+Rect]::new()
-                        if ([PcanWorkNativeDpi.WindowCapture]::GetWindowRect($candidate, [ref]$rect) -and
+                        $rect = [PcanExplorer10NativeDpi.WindowCapture+Rect]::new()
+                        if ([PcanExplorer10NativeDpi.WindowCapture]::GetWindowRect($candidate, [ref]$rect) -and
                             ($rect.Right - $rect.Left) -ge 640 -and ($rect.Bottom - $rect.Top) -ge 400) {
                             $handle = $candidate
                         }

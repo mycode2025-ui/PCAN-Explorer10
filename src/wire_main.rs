@@ -169,9 +169,9 @@ fn refresh_dbc_diagnostics(
 fn dbc_diagnostic_report(app: &App, english: bool) -> String {
     let mut report = String::new();
     report.push_str(if english {
-        "PcanWork DBC Diagnostics\n"
+        "PCAN-Explorer10 DBC Diagnostics\n"
     } else {
-        "PcanWork DBC 诊断报告\n"
+        "PCAN-Explorer10 DBC 诊断报告\n"
     });
     report.push_str(&format!(
         "{}: {}\n\n",
@@ -363,7 +363,7 @@ fn wire_main_children(app: Rc<std::cell::RefCell<App>>, windows: &ChildWindows) 
             let _ = slint::spawn_local(async move {
                 let Some(file) = rfd::AsyncFileDialog::new()
                     .add_filter("Text report", &["txt"])
-                    .set_file_name("PcanWork-DBC-Diagnostics.txt")
+                    .set_file_name("PCAN-Explorer10-DBC-Diagnostics.txt")
                     .set_parent(&dialog_window.window().window_handle())
                     .save_file()
                     .await
@@ -1205,7 +1205,7 @@ fn wire_main(app: Rc<std::cell::RefCell<App>>, ui: &AppWindow, child_windows: Ch
             let uiw = uiw.clone();
             let _ = slint::spawn_local(async move {
                 let mut dlg = rfd::AsyncFileDialog::new()
-                    .add_filter("PcanWork 工程", &["pcprj"])
+                    .add_filter("PCAN-Explorer10 工程", &["pcprj"])
                     .add_filter("旧工程/JSON", &["zcp", "json"])
                     .set_file_name(&default_file_name);
                 if let Some(w) = uiw.upgrade() {
@@ -1240,7 +1240,7 @@ fn wire_main(app: Rc<std::cell::RefCell<App>>, ui: &AppWindow, child_windows: Ch
             let _ = slint::spawn_local(async move {
                 let Some(ui) = uiw.upgrade() else { return };
                 let mut dlg = rfd::AsyncFileDialog::new()
-                    .add_filter("PcanWork 工程", &["pcprj"])
+                    .add_filter("PCAN-Explorer10 工程", &["pcprj"])
                     .add_filter("旧工程/JSON", &["zcp", "json"]);
                 dlg = dlg.set_parent(&ui.window().window_handle());
                 let Some(file) = dlg.pick_file().await else {

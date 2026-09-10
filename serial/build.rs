@@ -3,7 +3,7 @@ fn main() {
     println!("cargo:rerun-if-changed=assets/app.png");
     println!("cargo:rerun-if-changed=assets/app.ico");
 
-    // Use the default (light fluent) widget style, same as the PcanWork main app,
+    // Use the default (light fluent) widget style, same as the PCAN-Explorer10 main app,
     // so std-widget colors/text match the light academic-blue theme.
     slint_build::compile("ui/app.slint").expect("failed to compile Slint UI");
 

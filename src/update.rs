@@ -3,11 +3,11 @@ use serde::Deserialize;
 use std::time::Duration;
 
 const OWNER: &str = "mycode2025-ui";
-const REPOSITORY: &str = "pcanwork";
+const REPOSITORY: &str = "PCAN-Explorer10";
 const GITEE_LATEST_API: &str =
-    "https://gitee.com/api/v5/repos/mycode2025-ui/pcanwork/releases/latest";
+    "https://gitee.com/api/v5/repos/mycode2025-ui/PCAN-Explorer10/releases/latest";
 const GITHUB_LATEST_API: &str =
-    "https://api.github.com/repos/mycode2025-ui/pcanwork/releases/latest";
+    "https://api.github.com/repos/mycode2025-ui/PCAN-Explorer10/releases/latest";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct UpdateInfo {
@@ -83,7 +83,7 @@ fn populate_reachable_mirrors(info: &mut UpdateInfo) {
 
 fn expected_download(source: Source, version: &str) -> String {
     let tag = format!("v{version}");
-    let installer = format!("PcanWork-Setup-{version}.exe");
+    let installer = format!("PCAN-Explorer10-Setup-{version}.exe");
     match source {
         Source::Gitee => {
             format!("https://gitee.com/{OWNER}/{REPOSITORY}/releases/download/{tag}/{installer}")
@@ -109,7 +109,7 @@ fn download_exists(url: &str) -> bool {
         .header("Range", "bytes=0-0")
         .header(
             "User-Agent",
-            format!("PcanWork/{}", crate::product_version::current()),
+            format!("PCAN-Explorer10/{}", crate::product_version::current()),
         )
         .call()
         .is_ok()
@@ -189,7 +189,7 @@ fn fetch_release(url: &str) -> Result<ApiRelease, String> {
         .header("Accept", "application/json")
         .header(
             "User-Agent",
-            format!("PcanWork/{}", crate::product_version::current()),
+            format!("PCAN-Explorer10/{}", crate::product_version::current()),
         )
         .call()
         .map_err(|error| error.to_string())?;
@@ -238,7 +238,8 @@ fn select_installer(assets: &[ApiAsset]) -> Option<&ApiAsset> {
         .iter()
         .find(|asset| {
             let name = asset.name.to_ascii_lowercase();
-            name.starts_with("pcanwork-setup-") && name.ends_with(".exe")
+            (name.starts_with("pcan-explorer10-setup-") || name.starts_with("pcanwork-setup-"))
+                && name.ends_with(".exe")
         })
         .or_else(|| {
             assets
@@ -298,7 +299,10 @@ mod tests {
             "0.1.24",
             release(
                 "v0.1.25",
-                &[("PcanWork-Setup-0.1.25.exe", "https://gitee.test/setup.exe")],
+                &[(
+                    "PCAN-Explorer10-Setup-0.1.25.exe",
+                    "https://gitee.test/setup.exe",
+                )],
             ),
             Source::Gitee,
         )
@@ -318,7 +322,10 @@ mod tests {
             "0.4.7",
             release(
                 "v0.4.8",
-                &[("PcanWork-Setup-0.4.8.exe", "https://github.test/setup.exe")],
+                &[(
+                    "PCAN-Explorer10-Setup-0.4.8.exe",
+                    "https://github.test/setup.exe",
+                )],
             ),
             Source::Github,
         );
@@ -336,7 +343,10 @@ mod tests {
             "0.4.7",
             release(
                 "v0.4.8",
-                &[("PcanWork-Setup-0.4.8.exe", "https://gitee.test/setup.exe")],
+                &[(
+                    "PCAN-Explorer10-Setup-0.4.8.exe",
+                    "https://gitee.test/setup.exe",
+                )],
             ),
             Source::Gitee,
         );
@@ -344,7 +354,10 @@ mod tests {
             "0.4.7",
             release(
                 "v0.4.8",
-                &[("PcanWork-Setup-0.4.8.exe", "https://github.test/setup.exe")],
+                &[(
+                    "PCAN-Explorer10-Setup-0.4.8.exe",
+                    "https://github.test/setup.exe",
+                )],
             ),
             Source::Github,
         );
@@ -359,11 +372,11 @@ mod tests {
     fn expected_download_urls_use_the_product_release_convention() {
         assert_eq!(
             expected_download(Source::Github, "0.4.9"),
-            "https://github.com/mycode2025-ui/pcanwork/releases/download/v0.4.9/PcanWork-Setup-0.4.9.exe"
+            "https://github.com/mycode2025-ui/PCAN-Explorer10/releases/download/v0.4.9/PCAN-Explorer10-Setup-0.4.9.exe"
         );
         assert_eq!(
             expected_download(Source::Gitee, "0.4.9"),
-            "https://gitee.com/mycode2025-ui/pcanwork/releases/download/v0.4.9/PcanWork-Setup-0.4.9.exe"
+            "https://gitee.com/mycode2025-ui/PCAN-Explorer10/releases/download/v0.4.9/PCAN-Explorer10-Setup-0.4.9.exe"
         );
     }
 
@@ -382,7 +395,7 @@ mod tests {
             CheckResult::Current { latest } if latest == "0.3.11"
         ));
         assert!(matches!(
-            evaluate_release("0.3.2", release("v0.3.11", &[("PcanWork-Setup-0.3.11.exe", "setup")]), Source::Github).unwrap(),
+            evaluate_release("0.3.2", release("v0.3.11", &[("PCAN-Explorer10-Setup-0.3.11.exe", "setup")]), Source::Github).unwrap(),
             CheckResult::Available(info) if info.version == "0.3.11"
         ));
     }
@@ -391,7 +404,10 @@ mod tests {
     fn installer_selection_prefers_named_setup() {
         let release = release(
             "v1.0.0",
-            &[("helper.exe", "one"), ("PcanWork-Setup-1.0.0.exe", "two")],
+            &[
+                ("helper.exe", "one"),
+                ("PCAN-Explorer10-Setup-1.0.0.exe", "two"),
+            ],
         );
         assert_eq!(
             select_installer(&release.assets)
@@ -403,7 +419,7 @@ mod tests {
 
     #[test]
     fn release_notes_keep_utf8_and_strip_markdown_metadata() {
-        let notes = "## PcanWork v0.3.25\n\n- 改进 PCAN-USB FD 初始化兼容性。\n- PCAN ↔ ZLG 完成双向实机验证。\n- 每档波特率载荷校验正确。\n- 第四条不在弹窗显示。\n\n安装包：PcanWork-Setup.exe\nSHA-256：ABC";
+        let notes = "## PCAN-Explorer10 v0.3.25\n\n- 改进 PCAN-USB FD 初始化兼容性。\n- PCAN ↔ ZLG 完成双向实机验证。\n- 每档波特率载荷校验正确。\n- 第四条不在弹窗显示。\n\n安装包：PCAN-Explorer10-Setup.exe\nSHA-256：ABC";
         assert_eq!(
             compact_notes(notes),
             "• 改进 PCAN-USB FD 初始化兼容性。\n• PCAN ↔ ZLG 完成双向实机验证。\n• 每档波特率载荷校验正确。"

@@ -1,4 +1,4 @@
-# PcanWork
+# PCAN-Explorer10
 
 参考 ZLG ZXDoc 风格的 **CAN/CAN FD 报文分析工具**，Slint + Rust 开发，原生支持 **PCAN(PEAK)** CAN 卡。
 

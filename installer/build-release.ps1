@@ -125,7 +125,7 @@ foreach ($shortcut in [regex]::Matches($iconsSection, '(?m)^Name:\s*"([^"]+)"'))
     }
 }
 
-$installerPath = Join-Path $PSScriptRoot "dist\PcanWork-Setup-$appVersion.exe"
+$installerPath = Join-Path $PSScriptRoot "dist\PCAN-Explorer10-Setup-$appVersion.exe"
 if ((Test-Path -LiteralPath $installerPath) -and -not $AllowVersionOverwrite) {
     throw "Release $appVersion already exists. Increase the version before creating another release."
 }
@@ -148,7 +148,7 @@ if (-not $SkipCargoBuild) {
             [ordered]@{
                 Key = 'pcanwork'
                 Package = 'pcanwork'
-                Executable = 'pcanwork.exe'
+                Executable = 'PCAN-Explorer10.exe'
                 Directories = @('src', 'ui', 'crates\pcanwork-core', 'crates\pcanwork-ui-features', 'shared') + $patchedSlint
                 Files = @('build.rs', 'app.ico') + $commonFiles
             },
@@ -228,7 +228,7 @@ $binaryDirectory = Join-Path $projectRoot "target\$binaryProfile"
 if (-not $?) {
     throw 'Preparing runtime files failed.'
 }
-$pcanExe = Join-Path $binaryDirectory 'pcanwork.exe'
+$pcanExe = Join-Path $binaryDirectory 'PCAN-Explorer10.exe'
 $serialExe = Join-Path $binaryDirectory 'serial-tool.exe'
 $modbusExe = Join-Path $binaryDirectory 'modbus-tools.exe'
 foreach ($executable in @($pcanExe, $serialExe, $modbusExe)) {
@@ -239,7 +239,7 @@ foreach ($executable in @($pcanExe, $serialExe, $modbusExe)) {
 
 $versionStamp = Join-Path $projectRoot 'tools\stamp-pe-version.ps1'
 $stampDefinitions = @(
-    @{ Path = $pcanExe; Product = 'PcanWork'; Description = 'PcanWork CAN/CAN FD Engineering Workbench' },
+    @{ Path = $pcanExe; Product = 'PCAN-Explorer10'; Description = 'PCAN-Explorer10 CAN/CAN FD Engineering Workbench' },
     @{ Path = $serialExe; Product = 'Serial Tool'; Description = 'Serial, Network and SSH Debugging Tool' },
     @{ Path = $modbusExe; Product = 'Modbus Tools'; Description = 'Modbus Engineering Tools' }
 )
@@ -321,7 +321,7 @@ $releaseFiles | ForEach-Object {
 } | Set-Content -LiteralPath (Join-Path $reportDirectory 'SHA256SUMS.txt') -Encoding ascii
 $diffStat = (& git -C $projectRoot -c core.autocrlf=false diff --stat 2>$null)
 @(
-    "# PcanWork $appVersion"
+    "# PCAN-Explorer10 $appVersion"
     ""
     "Generated: $((Get-Date).ToString('o'))"
     "Commit: $commit"

@@ -22,7 +22,7 @@ if ($matches.Count -ne 1) {
 }
 $device = $matches[0]
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$executable = Join-Path $root 'target\debug\pcanwork.exe'
+$executable = Join-Path $root 'target\debug\PCAN-Explorer10.exe'
 $evidence = Join-Path $root ('artifacts\pnp-hotplug\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Force -Path $evidence | Out-Null
 $ipc = Join-Path $evidence 'ipc.txt'
@@ -33,7 +33,7 @@ try {
     for ($attempt = 0; $attempt -lt 150 -and -not (Test-Path -LiteralPath $ipc); $attempt++) {
         Start-Sleep -Milliseconds 100
     }
-    if (-not (Test-Path -LiteralPath $ipc)) { throw 'PcanWork IPC startup timed out.' }
+    if (-not (Test-Path -LiteralPath $ipc)) { throw 'PCAN-Explorer10 IPC startup timed out.' }
     $connection = @(Get-Content -LiteralPath $ipc)
     python (Join-Path $PSScriptRoot 'prepare_abnormal_exit.py') `
         --port ([int]$connection[0]) --token $connection[1] `
@@ -45,7 +45,7 @@ try {
     python (Join-Path $PSScriptRoot 'verify_hotplug_disconnect.py') `
         --port ([int]$connection[0]) --token $connection[1] `
         --report (Join-Path $evidence 'disconnect.json')
-    if ($LASTEXITCODE -ne 0) { throw 'PcanWork did not report the disabled USB adapter.' }
+    if ($LASTEXITCODE -ne 0) { throw 'PCAN-Explorer10 did not report the disabled USB adapter.' }
 
     Enable-PnpDevice -InstanceId $device.InstanceId -Confirm:$false
     $disabled = $false

@@ -10,7 +10,7 @@ try {
     }
     $reportDir = Join-Path $projectRoot ('artifacts\software-stress\' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
     New-Item -ItemType Directory -Path $reportDir | Out-Null
-    $executable = Join-Path $projectRoot 'target\debug\pcanwork.exe'
+    $executable = Join-Path $projectRoot 'target\debug\PCAN-Explorer10.exe'
     $argument = '"--software-stress=' + $reportDir + '"'
     $testProcess = Start-Process -FilePath $executable -ArgumentList $argument -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $reportDir 'stdout.log') -RedirectStandardError (Join-Path $reportDir 'stderr.log')
     if (-not $testProcess.WaitForExit(180000)) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""PcanWork 一键打包：自动递增版本号 → 编译 release(workspace) → 生成安装包。
+"""PCAN-Explorer10 一键打包：自动递增版本号 → 编译 release(workspace) → 生成安装包。
 
 用法:
     python installer/pack.py            # 递增 patch  (0.1.0 -> 0.1.1)  ← 默认
@@ -125,7 +125,7 @@ def main():
         sys.exit(f"✗ 找不到 ISCC: {ISCC}")
     run([ISCC, ISS])
 
-    out = ROOT / "installer" / "dist" / f"PcanWork-Setup-{verstr}.exe"
+    out = ROOT / "installer" / "dist" / f"PCAN-Explorer10-Setup-{verstr}.exe"
     if out.exists():
         mb = out.stat().st_size / 1024 / 1024
         print(f"\n✓ 安装包: {out}\n  体积: {mb:.2f} MB  (版本 {verstr})")

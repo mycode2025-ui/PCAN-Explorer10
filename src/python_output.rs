@@ -64,7 +64,7 @@ pub(super) fn drain_py_output(a: &mut App) {
     if dropped > a.py_output_dropped_seen {
         let newly_dropped = dropped - a.py_output_dropped_seen;
         lines.push(format!(
-            "[PcanWork] Python 输出队列已丢弃 {newly_dropped} 行（累计 {dropped}），测试结果日志不完整"
+            "[PCAN-Explorer10] Python 输出队列已丢弃 {newly_dropped} 行（累计 {dropped}），测试结果日志不完整"
         ));
         a.py_output_dropped_seen = dropped;
         if !a.run_status.starts_with("FAIL") {

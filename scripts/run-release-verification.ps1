@@ -174,7 +174,7 @@ try {
     }
     $installer = Get-Content -LiteralPath (Join-Path $root 'installer\pcanwork.iss') -Raw
     foreach ($requiredInstallerRule in @(
-        '.pcprj', 'PcanWork.Project', 'zlgcan.dll',
+        '.pcprj', 'PCAN-Explorer10.Project', 'zlgcan.dll',
         'kerneldlls', 'zlg-usbcan-e-u', 'ECanVci64.dll', 'ControlCAN.dll'
     )) {
         if (-not $installer.Contains($requiredInstallerRule)) {

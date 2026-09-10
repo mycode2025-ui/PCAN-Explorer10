@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the dedicated Windows icon for PcanWork .pcprj project files."""
+"""Generate the dedicated Windows icon for PCAN-Explorer10 .pcprj project files."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ def draw_project_icon(size: int) -> Image.Image:
         fy = y / canvas_size
         for x in range(px(0.10), px(0.89)):
             fx = x / canvas_size
-            # PcanWork blue with restrained modern depth.
+            # PCAN-Explorer10 blue with restrained modern depth.
             light = max(0.0, 1.0 - math.hypot(fx - 0.40, fy - 0.22) / 0.72)
             r = round(17 + 13 * light)
             g = round(75 + 48 * light)
@@ -81,7 +81,7 @@ def draw_project_icon(size: int) -> Image.Image:
         joint="curve",
     )
 
-    # Official PcanWork identity badge: digital square wave + sine wave.
+    # Official PCAN-Explorer10 identity badge: digital square wave + sine wave.
     badge_box = (px(0.275), px(0.245), px(0.715), px(0.615))
     badge_shadow = Image.new("RGBA", image.size, (0, 0, 0, 0))
     badge_shadow_draw = ImageDraw.Draw(badge_shadow)
@@ -172,7 +172,7 @@ def build_preview(icon: Image.Image) -> Image.Image:
     preview = Image.new("RGBA", (960, 520), (246, 248, 251, 255))
     preview.alpha_composite(icon.resize((360, 360), Image.Resampling.LANCZOS), (82, 70))
     draw = ImageDraw.Draw(preview)
-    draw.text((500, 105), "PcanWork Project", fill=(25, 53, 88))
+    draw.text((500, 105), "PCAN-Explorer10 Project", fill=(25, 53, 88))
     draw.text((500, 145), ".pcprj", fill=(31, 94, 172))
     x = 500
     for size in (64, 48, 32, 16):

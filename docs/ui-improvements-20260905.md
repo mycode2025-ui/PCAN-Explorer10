@@ -29,7 +29,7 @@
 
 ## 最终回归
 
-- cargo test -p pcanwork --bin pcanwork：54 通过，1 项联网测试忽略；测试编译 1m38s，执行 2.93s。
+- cargo test -p pcanwork --bin PCAN-Explorer10：54 通过，1 项联网测试忽略；测试编译 1m38s，执行 2.93s。
 - cargo check -p modbus-tools -p serial-tool：通过，46.94s。
 - 四个目标 Slint 组件检查通过，无新增编译诊断。
 - 渲染验证与数据模型负载验证已完成；未进行原生窗口点击、拖动、键盘交互自动化，需在下一轮运行验证中补充。当前安装程序未更新。

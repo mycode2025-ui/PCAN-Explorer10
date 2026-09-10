@@ -237,7 +237,7 @@ fn python_help_text() -> String {
             }
         }
     }
-    "未找到 templates\\help.py，请重新安装完整的 PcanWork 安装包。".to_string()
+    "未找到 templates\\help.py，请重新安装完整的 PCAN-Explorer10 安装包。".to_string()
 }
 
 #[cfg(test)]

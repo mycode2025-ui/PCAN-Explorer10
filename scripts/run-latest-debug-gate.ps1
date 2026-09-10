@@ -6,12 +6,12 @@ param(
 $ErrorActionPreference = "Stop"
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $target = Join-Path $workspace "target"
-$executable = Join-Path $target "debug\pcanwork.exe"
+$executable = Join-Path $target "debug\PCAN-Explorer10.exe"
 $ipcInfo = Join-Path $workspace "artifacts\latest-debug-ipc.txt"
 
 $env:CARGO_TARGET_DIR = $target
 $env:CARGO_BUILD_JOBS = "4"
-cargo build --bin pcanwork
+cargo build --bin PCAN-Explorer10
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 if (Test-Path -LiteralPath $ipcInfo) {

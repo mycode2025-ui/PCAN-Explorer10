@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$executable = Join-Path $root 'target\debug\pcanwork.exe'
+$executable = Join-Path $root 'target\debug\PCAN-Explorer10.exe'
 $evidence = Join-Path $root (
     'artifacts\abnormal-exit\' + (Get-Date -Format 'yyyyMMdd-HHmmss')
 )
@@ -22,7 +22,7 @@ function Start-IpcApplication([string]$InfoName) {
     }
     if (-not (Test-Path -LiteralPath $ipc)) {
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-        throw 'PcanWork IPC startup timed out.'
+        throw 'PCAN-Explorer10 IPC startup timed out.'
     }
     [pscustomobject]@{ Process = $process; Connection = @(Get-Content -LiteralPath $ipc) }
 }

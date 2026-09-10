@@ -1615,7 +1615,7 @@ mod tests {
         ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
         ca_params
             .distinguished_name
-            .push(DnType::CommonName, "PcanWork ephemeral test CA");
+            .push(DnType::CommonName, "PCAN-Explorer10 ephemeral test CA");
         ca_params.key_usages = vec![
             KeyUsagePurpose::DigitalSignature,
             KeyUsagePurpose::KeyCertSign,

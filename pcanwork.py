@@ -1,7 +1,7 @@
-"""pcanwork.py — PcanWork test-automation client (pure stdlib, Python 3.7+).
+"""pcanwork.py — PCAN-Explorer10 test-automation client (pure stdlib, Python 3.7+).
 
-Talks to a running PcanWork instance over TCP loopback using newline-delimited
-JSON. PcanWork launches your script DIRECTLY (python your_script.py) with this
+Talks to a running PCAN-Explorer10 instance over TCP loopback using newline-delimited
+JSON. PCAN-Explorer10 launches your script DIRECTLY (python your_script.py) with this
 module's directory on PYTHONPATH and two env vars set:
     PCANWORK_IPC_PORT   the ephemeral port the app is listening on
     PCANWORK_IPC_TOKEN  a per-session 32-hex token used in the handshake
@@ -106,7 +106,7 @@ def _check_ch(ch: int) -> int:
 
 # ----------------------------- session --------------------------------------
 class Session:
-    """One connection to the running PcanWork app. Use as a context manager."""
+    """One connection to the running PCAN-Explorer10 app. Use as a context manager."""
 
     def __init__(self, host: str, port: int, token: str, timeout: float = 5.0):
         self._seq = 1
@@ -120,7 +120,7 @@ class Session:
         try:
             self._sock = socket.create_connection((host, port), timeout=timeout)
         except OSError as e:
-            raise ConnectError(f"cannot reach PcanWork at {host}:{port}: {e}")
+            raise ConnectError(f"cannot reach PCAN-Explorer10 at {host}:{port}: {e}")
         self._sock.settimeout(None)
         self._rf = self._sock.makefile("r", encoding="utf-8", newline="\n")
         # per-id reply mailbox so a late/stale reply never satisfies the wrong call
@@ -178,7 +178,7 @@ class Session:
 
     def _send_line(self, obj: dict):
         if self._closed:
-            raise ConnectError("connection closed by PcanWork")
+            raise ConnectError("connection closed by PCAN-Explorer10")
         data = (json.dumps(obj, separators=(",", ":")) + "\n").encode("utf-8")
         self._sock.sendall(data)
 
@@ -581,7 +581,7 @@ def connect(host: str = "127.0.0.1",
         ev = os.environ.get("PCANWORK_IPC_PORT")
         if not ev:
             raise ConnectError("PCANWORK_IPC_PORT not set — run this script "
-                               "from PcanWork's Script Runner.")
+                               "from PCAN-Explorer10's Script Runner.")
         port = int(ev)
     if token is None:
         token = os.environ.get("PCANWORK_IPC_TOKEN", "")

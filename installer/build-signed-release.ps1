@@ -72,12 +72,12 @@ if (-not $issVersionMatch.Success -or $issVersionMatch.Groups[1].Value -ne $appV
 }
 $certificateThumbprint = $CertificateThumbprint.Replace(" ", "").ToUpperInvariant()
 $distDir = Join-Path $PSScriptRoot "dist"
-$installerPath = Join-Path $distDir "PcanWork-Setup-$appVersion.exe"
+$installerPath = Join-Path $distDir "PCAN-Explorer10-Setup-$appVersion.exe"
 if ((Test-Path -LiteralPath $installerPath) -and -not $AllowVersionOverwrite) {
     throw "Release $appVersion already exists. Increase the workspace version before creating another release."
 }
 $executables = @(
-    (Join-Path $projectRoot "target\release\pcanwork.exe"),
+    (Join-Path $projectRoot "target\release\PCAN-Explorer10.exe"),
     (Join-Path $projectRoot "target\release\serial-tool.exe"),
     (Join-Path $projectRoot "target\release\modbus-tools.exe")
 )
@@ -148,7 +148,7 @@ if (-not $SkipCargoBuild) {
 
 $versionStamp = Join-Path $projectRoot 'tools\stamp-pe-version.ps1'
 $stampDefinitions = @(
-    @{ Path = $executables[0]; Product = 'PcanWork'; Description = 'PcanWork CAN/CAN FD Engineering Workbench' },
+    @{ Path = $executables[0]; Product = 'PCAN-Explorer10'; Description = 'PCAN-Explorer10 CAN/CAN FD Engineering Workbench' },
     @{ Path = $executables[1]; Product = 'Serial Tool'; Description = 'Serial, Network and SSH Debugging Tool' },
     @{ Path = $executables[2]; Product = 'Modbus Tools'; Description = 'Modbus Engineering Tools' }
 )
@@ -171,7 +171,7 @@ foreach ($executable in $executables) {
 $integrityScript = Join-Path $projectRoot "tools\sign-integrity.ps1"
 & $integrityScript -Executable $executables[0] -Product pcanwork -AppVersion $appVersion -PrivateKey $IntegrityPrivateKey
 if ($LASTEXITCODE -ne 0) {
-    throw "PcanWork integrity signing failed with exit code $LASTEXITCODE."
+    throw "PCAN-Explorer10 integrity signing failed with exit code $LASTEXITCODE."
 }
 & $integrityScript -Executable $executables[2] -Product modbus -AppVersion $appVersion -PrivateKey $IntegrityPrivateKey
 if ($LASTEXITCODE -ne 0) {
@@ -203,12 +203,12 @@ $artifacts = @($executables + $installerPath) | ForEach-Object {
 }
 
 $manifest = [ordered]@{
-    product = "PcanWork"
+    product = "PCAN-Explorer10"
     version = $appVersion
     generated_utc = (Get-Date).ToUniversalTime().ToString("o")
     artifacts = $artifacts
 }
-$manifestPath = Join-Path $distDir "PcanWork-$appVersion-release-manifest.json"
+$manifestPath = Join-Path $distDir "PCAN-Explorer10-$appVersion-release-manifest.json"
 $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 $reportDirectory = Join-Path $distDir "reports\$appVersion"
 New-Item -ItemType Directory -Force -Path $reportDirectory | Out-Null
@@ -221,7 +221,7 @@ $artifacts | ForEach-Object {
 $commit = (& git -C $projectRoot rev-parse HEAD 2>$null)
 $dirty = [bool](& git -C $projectRoot status --porcelain 2>$null)
 @(
-    "# PcanWork $appVersion"
+    "# PCAN-Explorer10 $appVersion"
     ""
     "Generated: $((Get-Date).ToString('o'))"
     "Commit: $commit"

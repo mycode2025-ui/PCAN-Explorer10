@@ -16,7 +16,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $executablePath = (Resolve-Path -LiteralPath $Executable).Path
 
-if (-not ('PcanWorkBuild.PeVersionStamper' -as [type])) {
+if (-not ('PcanExplorer10Build.PeVersionStamper' -as [type])) {
     Add-Type -TypeDefinition @'
 using System;
 using System.Collections.Generic;
@@ -25,7 +25,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace PcanWorkBuild {
+namespace PcanExplorer10Build {
     public static class PeVersionStamper {
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         static extern IntPtr BeginUpdateResource(string fileName, bool deleteExistingResources);
@@ -139,7 +139,7 @@ namespace PcanWorkBuild {
 '@
 }
 
-[PcanWorkBuild.PeVersionStamper]::Stamp(
+[PcanExplorer10Build.PeVersionStamper]::Stamp(
     $executablePath, $Version, $ProductName, $Description, $CompanyName
 )
 

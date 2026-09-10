@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Long-running four-channel hardware stability gate for PcanWork."""
+"""Long-running four-channel hardware stability gate for PCAN-Explorer10."""
 
 from __future__ import annotations
 
