@@ -45,7 +45,7 @@ pub fn parse_playback_file(path: &str) -> Result<Vec<CanFrame>, String> {
     }
 }
 
-/// This app's CSV layout: Time,Ch,Dir,ID,Len,Data
+/// This app's CSV layout: Time,Ch,Dir,ID,Len,Data,Type
 pub fn parse_csv_frames(text: &str) -> Vec<CanFrame> {
     let mut v = Vec::new();
     for line in text.lines().skip(1) {
@@ -77,6 +77,7 @@ pub fn parse_csv_frames(text: &str) -> Vec<CanFrame> {
             .split_whitespace()
             .filter_map(|x| u8::from_str_radix(x, 16).ok())
             .collect();
+        let frame_type = p.get(6).map(|value| value.trim()).unwrap_or("DataFrame");
         v.push(CanFrame {
             t,
             ch,
@@ -85,8 +86,9 @@ pub fn parse_csv_frames(text: &str) -> Vec<CanFrame> {
             ext: id > 0x7FF,
             fd: false,
             brs: false,
-            remote: false,
-            error: false,
+            remote: frame_type.eq_ignore_ascii_case("RemoteFrame"),
+            error: frame_type.eq_ignore_ascii_case("ErrorFrame")
+                || frame_type.eq_ignore_ascii_case("ErrorCounterChange"),
             data,
         });
     }
@@ -114,6 +116,44 @@ pub fn parse_asc_frames(text: &str) -> Vec<CanFrame> {
             continue;
         }
         let toks: Vec<&str> = line.split_whitespace().collect();
+        if toks.len() >= 5
+            && (toks[2].eq_ignore_ascii_case("ErrorFrame")
+                || toks[2].eq_ignore_ascii_case("ErrorCounterChange"))
+        {
+            let Ok(t) = toks[0].parse::<f64>() else {
+                continue;
+            };
+            let t = if timestamps_absolute {
+                date_epoch.map(|base| base + t).unwrap_or(t)
+            } else {
+                t
+            };
+            let ch = toks[1].parse::<u8>().unwrap_or(1);
+            let Ok(id) = u32::from_str_radix(toks[3].trim_start_matches("0x"), 16) else {
+                continue;
+            };
+            let len = toks[4].parse::<usize>().unwrap_or(0);
+            let data = toks
+                .get(5..)
+                .unwrap_or_default()
+                .iter()
+                .take(len)
+                .filter_map(|value| u8::from_str_radix(value, 16).ok())
+                .collect();
+            v.push(CanFrame {
+                t,
+                ch,
+                tx: false,
+                id,
+                ext: false,
+                fd: false,
+                brs: false,
+                remote: false,
+                error: true,
+                data,
+            });
+            continue;
+        }
         if toks.len() < 5 {
             // 远程帧行最少 5 个 token: <t> <ch> <id> <dir> r
             continue;

@@ -12,6 +12,7 @@ const OBJ_SIG: &[u8; 4] = b"LOBJ";
 const FILE_HEADER_SIZE: u32 = 144;
 
 const OBJ_CAN_MESSAGE: u32 = 1;
+const OBJ_CAN_ERROR_EXT: u32 = 73;
 const OBJ_LOG_CONTAINER: u32 = 10;
 const OBJ_CAN_MESSAGE2: u32 = 86;
 const OBJ_CAN_FD_MESSAGE: u32 = 100;
@@ -124,6 +125,41 @@ fn parse_container(data: &[u8], out: &mut Vec<CanFrame>) {
         let payload = pos + header_size;
 
         match object_type {
+            OBJ_CAN_ERROR_EXT if payload + 24 <= pos + object_size => {
+                let channel = u16le(data, payload);
+                let ecc = data[payload + 8];
+                let position = data[payload + 9];
+                let encoded_id = u32le(data, payload + 16);
+                let id = if matches!(encoded_id, 0 | 1 | 2 | 4 | 8) {
+                    encoded_id
+                } else {
+                    match (ecc >> 6) & 0x03 {
+                        0 => 1,
+                        1 => 2,
+                        2 => 4,
+                        _ => 8,
+                    }
+                };
+                let extra = payload + 24;
+                let bytes = data[extra..pos + object_size].to_vec();
+                let frame_data = if bytes.is_empty() {
+                    vec![(ecc >> 5) & 1, position, 0, 0]
+                } else {
+                    bytes
+                };
+                out.push(CanFrame {
+                    t,
+                    ch: channel as u8,
+                    tx: false,
+                    id,
+                    ext: false,
+                    fd: false,
+                    brs: false,
+                    remote: false,
+                    error: true,
+                    data: frame_data,
+                });
+            }
             OBJ_CAN_MESSAGE | OBJ_CAN_MESSAGE2
                 if payload + 16 <= pos + object_size => {
                     let channel = u16le(data, payload);
@@ -197,6 +233,47 @@ fn fd_dlc(len: usize) -> u8 {
 }
 
 fn append_frame_object(payload: &mut Vec<u8>, f: &CanFrame) {
+    if f.error {
+        let meaning = match f.id {
+            1 => 0u8,
+            2 => 1,
+            4 => 2,
+            _ => 3,
+        };
+        let direction = f.data.first().copied().unwrap_or(0) & 1;
+        let position = f.data.get(1).copied().unwrap_or(0) & 0x1F;
+        let ecc = position | (direction << 5) | (meaning << 6);
+        let flags_ext = u16::from(position)
+            | (u16::from(direction) << 5)
+            | (u16::from(meaning) << 6)
+            | (u16::from(if f.tx { 3u8 } else { 2u8 }) << 12);
+        let obj_size = 16 + 16 + 24 + f.data.len() as u32;
+        payload.extend_from_slice(OBJ_SIG);
+        payload.extend_from_slice(&32u16.to_le_bytes());
+        payload.extend_from_slice(&1u16.to_le_bytes());
+        payload.extend_from_slice(&obj_size.to_le_bytes());
+        payload.extend_from_slice(&OBJ_CAN_ERROR_EXT.to_le_bytes());
+        payload.extend_from_slice(&2u32.to_le_bytes());
+        payload.extend_from_slice(&0u16.to_le_bytes());
+        payload.extend_from_slice(&0u16.to_le_bytes());
+        payload.extend_from_slice(&((f.t * 1e9) as u64).to_le_bytes());
+        payload.extend_from_slice(&(f.ch as u16).to_le_bytes());
+        payload.extend_from_slice(&0u16.to_le_bytes());
+        payload.extend_from_slice(&1u32.to_le_bytes());
+        payload.push(ecc);
+        payload.push(position);
+        payload.push(f.data.len().min(15) as u8);
+        payload.push(0);
+        payload.extend_from_slice(&0u32.to_le_bytes());
+        payload.extend_from_slice(&f.id.to_le_bytes());
+        payload.extend_from_slice(&flags_ext.to_le_bytes());
+        payload.extend_from_slice(&0u16.to_le_bytes());
+        payload.extend_from_slice(&f.data);
+        while payload.len() % 4 != 0 {
+            payload.push(0);
+        }
+        return;
+    }
     let can_id = (f.id & 0x1FFF_FFFF) | if f.ext { CAN_ID_EXT } else { 0 };
     if f.fd {
         let obj_size: u32 = 16 + 16 + 84;

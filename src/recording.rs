@@ -75,7 +75,7 @@ impl ActiveRecording {
                     .map_err(|error| format!("创建记录文件失败: {error}"))?;
                 let mut writer = std::io::BufWriter::new(file);
                 match format {
-                    Format::Csv => writeln!(writer, "Time,Ch,Dir,ID,Len,Data"),
+                    Format::Csv => writeln!(writer, "Time,Ch,Dir,ID,Len,Data,Type"),
                     Format::Asc => writeln!(
                         writer,
                         "date {}",
@@ -108,30 +108,58 @@ impl ActiveRecording {
                 ActiveWriter::Text { writer, format } => match format {
                     Format::Csv => writeln!(
                         writer,
-                        "{:.6},CAN{},{},0x{:X},{},{}",
+                        "{:.6},CAN{},{},0x{:X},{},{},{}",
                         frame.t,
                         frame.ch,
                         if frame.tx { "Tx" } else { "Rx" },
                         frame.id,
                         frame.data.len(),
-                        frame.data_hex()
+                        frame.data_hex(),
+                        if frame.error {
+                            if frame.id == 0 {
+                                "ErrorCounterChange"
+                            } else {
+                                "ErrorFrame"
+                            }
+                        } else if frame.remote {
+                            "RemoteFrame"
+                        } else {
+                            "DataFrame"
+                        }
                     ),
                     Format::Asc => {
-                        let id = if frame.ext {
-                            format!("{:X}x", frame.id)
+                        if frame.error {
+                            writeln!(
+                                writer,
+                                "{:.6} {} {} {:X} {} {}",
+                                frame.t,
+                                frame.ch,
+                                if frame.id == 0 {
+                                    "ErrorCounterChange"
+                                } else {
+                                    "ErrorFrame"
+                                },
+                                frame.id,
+                                frame.data.len(),
+                                frame.data_hex()
+                            )
                         } else {
-                            format!("{:X}", frame.id)
-                        };
-                        writeln!(
-                            writer,
-                            "{:.6} {} {:<16}{}   d {} {}",
-                            frame.t,
-                            frame.ch,
-                            id,
-                            if frame.tx { "Tx" } else { "Rx" },
-                            frame.data.len(),
-                            frame.data_hex()
-                        )
+                            let id = if frame.ext {
+                                format!("{:X}x", frame.id)
+                            } else {
+                                format!("{:X}", frame.id)
+                            };
+                            writeln!(
+                                writer,
+                                "{:.6} {} {:<16}{}   d {} {}",
+                                frame.t,
+                                frame.ch,
+                                id,
+                                if frame.tx { "Tx" } else { "Rx" },
+                                frame.data.len(),
+                                frame.data_hex()
+                            )
+                        }
                     }
                     Format::Blf => unreachable!(),
                 }
@@ -392,6 +420,82 @@ mod tests {
             error: false,
             data: vec![index as u8],
         }
+    }
+
+    fn error_frame(id: u32) -> CanFrame {
+        CanFrame {
+            t: 0.125,
+            ch: 2,
+            tx: false,
+            id,
+            ext: false,
+            fd: false,
+            brs: false,
+            remote: false,
+            error: true,
+            data: vec![1, 7, 3, 9],
+        }
+    }
+
+    fn temp_recording_path(extension: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "pcanwork_error_recording_{}_{}.{}",
+            std::process::id(),
+            Local::now().timestamp_nanos_opt().unwrap_or_default(),
+            extension
+        ))
+    }
+
+    #[test]
+    fn csv_recording_preserves_error_and_following_frame() {
+        let path = temp_recording_path("csv");
+        let mut recording = ActiveRecording::create(path.clone(), Format::Csv).unwrap();
+        recording.write_batch(&[error_frame(8), frame(1)]).unwrap();
+        recording.finish().unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let back = crate::convert::parse_csv_frames(&text);
+        assert!(text.contains("ErrorFrame"));
+        assert_eq!(back.len(), 2, "错误帧之后的普通帧也必须写入");
+        assert!(back[0].error);
+        assert_eq!(back[0].id, 8);
+        assert_eq!(back[0].data, vec![1, 7, 3, 9]);
+        assert!(!back[1].error);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn asc_recording_preserves_error_counter_change_and_following_frame() {
+        let path = temp_recording_path("asc");
+        let mut recording = ActiveRecording::create(path.clone(), Format::Asc).unwrap();
+        recording.write_batch(&[error_frame(0), frame(2)]).unwrap();
+        recording.finish().unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let back = crate::convert::parse_asc_frames(&text);
+        assert!(text.contains("ErrorCounterChange"));
+        assert_eq!(back.len(), 2, "错误计数器变化之后的普通帧也必须写入");
+        assert!(back[0].error);
+        assert_eq!(back[0].id, 0);
+        assert_eq!(back[0].data, vec![1, 7, 3, 9]);
+        assert!(!back[1].error);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn blf_recording_preserves_error_and_following_frame() {
+        let path = temp_recording_path("blf");
+        let mut recording = ActiveRecording::create(path.clone(), Format::Blf).unwrap();
+        recording.write_batch(&[error_frame(4), frame(3)]).unwrap();
+        recording.finish().unwrap();
+
+        let back = blf::read(&path.to_string_lossy()).unwrap();
+        assert_eq!(back.len(), 2, "错误帧之后的普通帧也必须写入");
+        assert!(back[0].error);
+        assert_eq!(back[0].id, 4);
+        assert_eq!(back[0].data, vec![1, 7, 3, 9]);
+        assert!(!back[1].error);
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
