@@ -131,7 +131,19 @@ export component ProductButton inherits Rectangle {
         : !root.enabled ? ProductDesign.border
         : (root.primary || root.active) ? root.accent
         : root.boxed || touch.has-hover ? ProductDesign.border : transparent;
+    transform-origin: { x: root.width / 2, y: root.height / 2 };
+    transform-scale: !root.enabled ? 100% : touch.pressed ? 96% : touch.has-hover ? 102% : 100%;
+    drop-shadow-blur: !root.enabled ? 0px : touch.pressed ? 2px
+        : touch.has-hover ? ((root.primary || root.active) ? 14px : 9px)
+        : (root.primary || root.active) ? 5px : 0px;
+    drop-shadow-offset-y: touch.pressed ? 0px : touch.has-hover ? 3px : 1px;
+    drop-shadow-color: (root.primary || root.active)
+        ? root.accent.with-alpha(touch.has-hover ? 0.42 : 0.22)
+        : ProductDesign.shadow;
     animate background { duration: 140ms; }
+    animate transform-scale { duration: 120ms; easing: spring(0.18); }
+    animate drop-shadow-blur { duration: 150ms; easing: spring(0.16); }
+    animate drop-shadow-offset-y { duration: 120ms; }
     accessible-role: AccessibleRole.button;
     accessible-label: root.text == "×" ? ProductI18n.t("关闭", "Close") : root.text;
     accessible-enabled: root.enabled;
@@ -169,23 +181,45 @@ export component ProductButton inherits Rectangle {
 // A real popup owns Tab traversal and restores the opener's focus on close.
 export component ProductModal inherits Rectangle {
     in property <bool> open: false;
+    private property <bool> reveal: false;
     callback close-requested;
     background: transparent;
-    changed open => { if root.open { modal.show(); } else { modal.close(); } }
+    changed open => {
+        if root.open {
+            root.reveal = false;
+            modal.show();
+        } else {
+            root.reveal = false;
+            modal.close();
+        }
+    }
     init => { if root.open { modal.show(); } }
+    Timer {
+        interval: 16ms;
+        running: root.open && !root.reveal;
+        triggered => { root.reveal = true; }
+    }
     modal := PopupWindow {
         x: 0px; y: 0px;
         width: root.width; height: root.height;
         close-policy: no-auto-close;
         Rectangle {
             background: ProductDesign.scrim;
-            FocusScope {
-                focus-on-tab-navigation: false;
-                key-pressed(event) => {
-                    if event.text == Key.Escape { root.close-requested(); return accept; }
-                    return reject;
+            opacity: root.reveal ? 1 : 0;
+            animate opacity { duration: 180ms; easing: ease-out; }
+            entrance-layer := Rectangle {
+                background: transparent;
+                transform-origin: { x: self.width / 2, y: self.height / 2 };
+                transform-scale: root.reveal ? 100% : 94%;
+                animate transform-scale { duration: 220ms; easing: spring(0.16); }
+                FocusScope {
+                    focus-on-tab-navigation: false;
+                    key-pressed(event) => {
+                        if event.text == Key.Escape { root.close-requested(); return accept; }
+                        return reject;
+                    }
+                    @children
                 }
-                @children
             }
         }
     }
@@ -204,10 +238,13 @@ export component ProductDialogSurface inherits Rectangle {
     background: ProductDesign.surface;
     border-radius: ProductDesign.dialog-radius;
     border-width: 1px; border-color: ProductDesign.border;
+    drop-shadow-blur: 24px;
+    drop-shadow-offset-y: 8px;
+    drop-shadow-color: ProductDesign.shadow;
     ScrollView {
         x: 1px; y: 1px; width: parent.width - 2px; height: parent.height - 2px;
-        viewport-width: self.width;
-        viewport-height: max(self.height, root.dialog-height - 2px);
+        content-width: self.width;
+        content-height: max(self.height, root.dialog-height - 2px);
         Rectangle {
             width: parent.width; height: parent.height;
             @children
@@ -286,11 +323,19 @@ export component ProductHeaderButton inherits Rectangle {
         : hover-area.has-hover ? ProductDesign.surface : ProductDesign.surface-raised;
     border-width: key-focus.has-focus ? ProductDesign.focus-width : 1px;
     border-color: key-focus.has-focus ? ProductDesign.warning : ProductDesign.border;
+    transform-origin: { x: root.width / 2, y: root.height / 2 };
+    transform-scale: hover-area.pressed ? 95% : hover-area.has-hover ? 102% : 100%;
+    drop-shadow-blur: hover-area.pressed ? 1px : hover-area.has-hover ? 9px : 0px;
+    drop-shadow-offset-y: hover-area.pressed ? 0px : hover-area.has-hover ? 3px : 0px;
+    drop-shadow-color: ProductDesign.brand.with-alpha(0.28);
     accessible-role: AccessibleRole.button;
     accessible-label: root.text;
     forward-focus: key-focus;
     accessible-action-default => { root.clicked(); }
     animate background { duration: 80ms; }
+    animate transform-scale { duration: 120ms; easing: spring(0.18); }
+    animate drop-shadow-blur { duration: 140ms; easing: spring(0.16); }
+    animate drop-shadow-offset-y { duration: 120ms; }
 
     label := Text {
         text: root.text;
@@ -428,7 +473,7 @@ export component ProductThemeSwitch inherits Rectangle {
         y: 3px;
         border-radius: 4px;
         background: ProductDesign.surface;
-        animate x { duration: 140ms; easing: ease-in-out; }
+        animate x { duration: 140ms; easing: spring(0.12); }
     }
     HorizontalLayout {
         Rectangle {

@@ -15,7 +15,7 @@ param(
     [ValidateRange(0, 876000)]
     [int]$ValidHours = 0,
 
-    [string]$PrivateKey = 'D:\_LicenseSecrets\PcanWork\pcanwork-ed25519-private.pem',
+    [string]$PrivateKey = 'D:\_Xcharge\70_许可证与密钥\PCANWork\pcanwork-ed25519-private.pem',
 
     [string]$OutputPath = '.\license.pcanlic'
 )

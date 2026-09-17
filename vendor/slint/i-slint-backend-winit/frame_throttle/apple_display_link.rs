@@ -32,19 +32,23 @@ define_class!(
     impl DisplayLinkTarget {
         #[unsafe(method(tick:))]
         fn tick(&self, display_link: &CADisplayLink) {
-            corelib::platform::update_timers_and_animations();
-            if let Some(adapter) = self.ivars().window_adapter.upgrade() {
-                // Call draw() directly rather than request_redraw(), because
-                // during modal tracking loops (e.g. context menus) winit's
-                // event loop is blocked and would never process RedrawRequested.
-                if let Err(e) = adapter.draw() {
-                    i_slint_core::debug_log!("Error rendering during modal loop: {e}");
-                    display_link.setPaused(true);
-                    return;
-                }
-                if !adapter.window().has_active_animations() && !adapter.pending_redraw() {
-                    display_link.setPaused(true);
-                }
+            let Some(adapter) = self.ivars().window_adapter.upgrade() else {
+                // The window is gone, so there is nothing for this display link to drive.
+                return;
+            };
+            corelib::window::WindowInner::from_pub(adapter.window())
+                .context()
+                .update_timers_and_animations();
+            // Call draw() directly rather than request_redraw(), because
+            // during modal tracking loops (e.g. context menus) winit's
+            // event loop is blocked and would never process RedrawRequested.
+            if let Err(e) = adapter.draw() {
+                i_slint_core::debug_log!("Error rendering during modal loop: {e}");
+                display_link.setPaused(true);
+                return;
+            }
+            if !adapter.window().has_active_animations() && !adapter.pending_redraw() {
+                display_link.setPaused(true);
             }
         }
     }
@@ -100,8 +104,6 @@ pub(super) fn try_create(
 ) -> Option<Box<dyn super::FrameThrottle>> {
     use objc2::runtime::AnyClass;
     use objc2::sel;
-    use objc2_app_kit::NSView;
-    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
     // -[NSView displayLinkWithTarget:selector:] is only available on macOS
     // 14.0+. The CADisplayLink class itself is reachable on older macOS via
@@ -112,10 +114,7 @@ pub(super) fn try_create(
 
     let mtm = MainThreadMarker::new().expect("frame throttle must be created on main thread");
 
-    let RawWindowHandle::AppKit(handle) = winit_window.window_handle().ok()?.as_raw() else {
-        return None;
-    };
-    let ns_view: &NSView = unsafe { handle.ns_view.cast().as_ref() };
+    let ns_view = crate::macos::ns_view(winit_window)?;
 
     let target = DisplayLinkTarget::new(mtm, window_adapter);
     let display_link = unsafe { ns_view.displayLinkWithTarget_selector(&target, sel!(tick:)) };

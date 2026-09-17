@@ -233,7 +233,7 @@ export component TxWindow inherits ThemedWindow {
                 }
                 ScrollView {
                     x: 12px; y: 34px; width: parent.width - 24px; height: parent.height - 88px;
-                    viewport-width: root.list-total-w;
+                    content-width: root.list-total-w;
                     VerticalLayout {
                         width: root.list-total-w;
                         Rectangle {
@@ -359,9 +359,9 @@ export component TxWindow inherits ThemedWindow {
             }
             // 右：发送列表 + 信号编辑
             right-scroll := ScrollView {
-                viewport-width: max(900px, self.visible-width);
+                content-width: max(900px, self.visible-width);
             VerticalLayout {
-                width: right-scroll.viewport-width; height: right-scroll.visible-height;
+                width: right-scroll.content-width; height: right-scroll.visible-height;
                 horizontal-stretch: 1;
                 padding: 6px;
                 spacing: 6px;
@@ -498,9 +498,9 @@ export component TxWindow inherits ThemedWindow {
                 }
             }
             vary-scroll := ScrollView {
-                viewport-width: max(900px, self.visible-width);
+                content-width: max(900px, self.visible-width);
             VerticalLayout {
-                width: vary-scroll.viewport-width; height: vary-scroll.visible-height;
+                width: vary-scroll.content-width; height: vary-scroll.visible-height;
                 horizontal-stretch: 1;
                 padding: 6px;
                 spacing: 6px;
@@ -574,7 +574,7 @@ export component TxWindow inherits ThemedWindow {
                         x: 0px; y: 0px; width: parent.width * 0.48; height: parent.height;
                         background: Theme.panel; border-width: 1px; border-color: Theme.border;
                             info-scroll := ScrollView {
-                                width: 100%; height: 100%; viewport-width: self.visible-width;
+                                width: 100%; height: 100%; content-width: self.visible-width;
                                 VerticalLayout { width: info-scroll.visible-width; padding: 8px; spacing: 6px;
                                     Text { text: I18n.en ? "Signal info" : "信号信息"; color: Theme.text; font-weight: 700; }
                                     Text { text: root.tx-sel-sig-name; color: Theme.accent; wrap: word-wrap; }
@@ -787,7 +787,7 @@ export component TxWindow inherits ThemedWindow {
                         border-radius: 5px;
                         help-scroll := ScrollView {
                             x: 0px; y: 0px; width: parent.width; height: parent.height;
-                            viewport-width: self.visible-width;
+                            content-width: self.visible-width;
                             VerticalLayout {
                                 width: help-scroll.visible-width;
                                 padding: 10px;

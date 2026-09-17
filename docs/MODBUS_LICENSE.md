@@ -6,7 +6,7 @@ PCAN-Explorer10 与 Modbus Tools 共用同一份离线授权。未授权时，�
 
 私钥位于发布机的独立目录，不进入源码、Release 二进制或安装包：
 
-`D:\_LicenseSecrets\PcanWork\pcanwork-ed25519-private.pem`
+`D:\_Xcharge\70_许可证与密钥\PCANWork\pcanwork-ed25519-private.pem`
 
 授权管理员在受控发布机运行：
 

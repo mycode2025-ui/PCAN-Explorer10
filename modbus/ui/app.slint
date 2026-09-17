@@ -156,7 +156,7 @@ component ModeSwitch inherits Rectangle {
         x: root.selected == 0 ? 4px : (parent.width / 2 + 4px);
         border-radius: self.height / 2;
         background: Theme.dark ? ProductDesign.selection : Theme.accent-fg;
-        animate x { duration: 160ms; easing: ease-in-out; }
+        animate x { duration: 160ms; easing: spring(0.12); }
     }
 
     // left segment
@@ -609,7 +609,7 @@ component OverlayChart inherits Rectangle {
             height: 28px;
             vertical-scrollbar-policy: ScrollBarPolicy.always-off;
             horizontal-scrollbar-policy: ScrollBarPolicy.as-needed;
-            viewport-height: 22px;
+            content-height: 22px;
             HorizontalLayout {
                 height: 22px;
                 spacing: 6px;

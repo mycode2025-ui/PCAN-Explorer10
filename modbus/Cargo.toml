@@ -16,7 +16,7 @@ chrono = "0.4"
 ed25519-dalek = "2.2"
 futures = "0.3"
 rfd = "0.17.2"
-slint = { version = "1.17.1", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg", "renderer-software", "accessibility"] }
+slint = { version = "1.18.0", default-features = false, features = ["std", "compat-1-18", "backend-winit", "renderer-femtovg", "renderer-software", "accessibility"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "macros", "io-util"] }
 tokio-modbus = { version = "0.17", default-features = false, features = ["tcp", "rtu", "tcp-server", "rtu-server", "rtu-over-tcp-server"] }
 tokio-serial = "5.5"
@@ -33,6 +33,6 @@ tempfile = "3"
 
 [build-dependencies]
 embed-manifest = "1.5.0"
-slint-build = "1.17.1"
+slint-build = "1.18.0"
 winresource = "0.1"  # 宓屽叆 exe 鍥炬爣(app.ico)
 # 娉? profile 鐢卞伐浣滃尯鏍?(Pcanwork/Cargo.toml) 缁熶竴绠＄悊锛屾垚鍛樹笉鍐嶅崟鐙缃€?

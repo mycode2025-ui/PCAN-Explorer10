@@ -17,7 +17,7 @@ param(
 
     [switch]$AllowVersionOverwrite,
 
-    [string]$IntegrityPrivateKey = 'D:\_LicenseSecrets\PcanWork\pcanwork-ed25519-private.pem'
+    [string]$IntegrityPrivateKey = 'D:\_Xcharge\70_许可证与密钥\PCANWork\pcanwork-ed25519-private.pem'
 )
 
 Set-StrictMode -Version Latest

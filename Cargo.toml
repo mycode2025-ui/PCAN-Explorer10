@@ -33,12 +33,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 semver = "1"
 sha2 = "0.10"
-slint = { version = "1.17.1", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-software", "renderer-femtovg", "accessibility", "raw-window-handle-06"] }
+slint = { version = "1.18.0", default-features = false, features = ["std", "compat-1-18", "backend-winit", "renderer-software", "renderer-femtovg", "accessibility", "raw-window-handle-06"] }
 ureq = { version = "3.1", default-features = false, features = ["json", "native-tls", "gzip", "win-system-proxy"] }
 
 [build-dependencies]
 embed-manifest = "1.5.0"
-slint-build = "1.17.1"
+slint-build = "1.18.0"
 winresource = "0.1"
 
 # 工作区统一使用包含产品补丁的 vendored Slint。

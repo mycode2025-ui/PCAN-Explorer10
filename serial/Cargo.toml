@@ -13,11 +13,11 @@ dirs = "6"
 encoding_rs = "0.8"
 rfd = "0.15"
 serialport = "4"
-slint = { version = "1.17.1", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg", "renderer-software", "accessibility"] }
+slint = { version = "1.18.0", default-features = false, features = ["std", "compat-1-18", "backend-winit", "renderer-femtovg", "renderer-software", "accessibility"] }
 
 [build-dependencies]
 embed-manifest = "1.5.0"
-slint-build = "1.17.1"
+slint-build = "1.18.0"
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"

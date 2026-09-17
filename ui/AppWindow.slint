@@ -567,7 +567,7 @@ export component AppWindow inherits Window {
                     vertical-stretch: 1;
                     background: Theme.panel;
                     ScrollView {
-                        viewport-width: ColW.total;
+                        content-width: ColW.total;
                         VerticalLayout {
                             width: ColW.total;
                             Rectangle {
@@ -597,15 +597,15 @@ export component AppWindow inherits Window {
                             }
                             msglist := ListView {
                                 // 自动滚动：内容增长时若开启则把视口拉到底
-                                changed viewport-height => {
+                                changed content-height => {
                                     if (root.auto-scroll) {
-                                        self.viewport-y = min(0px, self.visible-height - self.viewport-height);
+                                        self.content-y = min(0px, self.visible-height - self.content-height);
                                     }
                                 }
                                 property <bool> as-trigger: root.auto-scroll;
                                 changed as-trigger => {
                                     if (self.as-trigger) {
-                                        self.viewport-y = min(0px, self.visible-height - self.viewport-height);
+                                        self.content-y = min(0px, self.visible-height - self.content-height);
                                     }
                                 }
                                 for row[i] in root.msgs: Rectangle {
@@ -885,15 +885,15 @@ export component AppWindow inherits Window {
                                 }
                             }
                             console-list := ListView {
-                                changed viewport-height => {
+                                changed content-height => {
                                     if (root.console-autoscroll) {
-                                        self.viewport-y = min(0px, self.visible-height - self.viewport-height);
+                                        self.content-y = min(0px, self.visible-height - self.content-height);
                                     }
                                 }
                                 property <bool> autoscroll-trigger: root.console-autoscroll;
                                 changed autoscroll-trigger => {
                                     if (self.autoscroll-trigger) {
-                                        self.viewport-y = min(0px, self.visible-height - self.viewport-height);
+                                        self.content-y = min(0px, self.visible-height - self.content-height);
                                     }
                                 }
                                 for line[i] in root.console-lines: Rectangle {
@@ -1419,7 +1419,7 @@ export component AppWindow inherits Window {
                     border-radius: 6px;
                     ScrollView {
                         x: 0px; y: 0px; width: parent.width; height: parent.height;
-                        viewport-width: self.visible-width;
+                        content-width: self.visible-width;
                         VerticalLayout {
                             width: parent.visible-width;
                             padding: 8px;
@@ -1464,7 +1464,7 @@ export component AppWindow inherits Window {
                     TBtn { boxed: true; text: I18n.en ? "Close" : "关闭"; clicked => { root.detail-page = 0; } }
                 }
                 detail-scroll := ScrollView {
-                    viewport-width: self.visible-width;
+                    content-width: self.visible-width;
                     VerticalLayout {
                         width: detail-scroll.visible-width; padding: 8px; spacing: 12px;
                         Text {

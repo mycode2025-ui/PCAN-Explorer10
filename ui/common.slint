@@ -710,7 +710,7 @@ export component HexByteEditorOverlay inherits Rectangle {
                 background: Theme.panel2; border-width: 1px; border-color: Theme.border; border-radius: 4px;
                 ScrollView {
                     x: 0px; y: 0px; width: parent.width; height: parent.height;
-                    viewport-width: 568px;
+                    content-width: 568px;
                     VerticalLayout { width: 568px; padding: 8px; spacing: 4px; alignment: start;
                         for byte-row[r] in root.rows: HorizontalLayout {
                             spacing: 5px;
@@ -993,7 +993,7 @@ export component SimGlyph inherits Rectangle {
                     background: w.on ? Theme.on-accent : Theme.text-dim;
                     drop-shadow-blur: 3px;
                     drop-shadow-color: Theme.shadow;
-                    animate x { duration: 140ms; easing: ease-in-out; }
+                    animate x { duration: 140ms; easing: spring(0.12); }
                     animate background { duration: 140ms; }
                 }
             }

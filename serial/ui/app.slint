@@ -212,7 +212,7 @@ component ToolStrip inherits ScrollView {
     horizontal-stretch: 1;
     vertical-scrollbar-policy: ScrollBarPolicy.always-off;
     horizontal-scrollbar-policy: ScrollBarPolicy.as-needed;
-    viewport-height: ProductDesign.toolbar-control-height;
+    content-height: ProductDesign.toolbar-control-height;
 }
 
 export component AppWindow inherits Window {
@@ -803,12 +803,12 @@ export component AppWindow inherits Window {
                                 width: parent.width;
                                 height: parent.height;
                                 horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
-                                viewport-height: terminal-output.height + 16px;
+                                content-height: terminal-output.height + 16px;
                                 scrolled => {
-                                    root.terminal-following = self.viewport-y <= min(0px, self.visible-height - self.viewport-height) + 2px;
+                                    root.terminal-following = self.content-y <= min(0px, self.visible-height - self.content-height) + 2px;
                                 }
                                 changed scroll-request => {
-                                    self.viewport-y = min(0px, self.visible-height - self.viewport-height);
+                                    self.content-y = min(0px, self.visible-height - self.content-height);
                                 }
 
                                 terminal-output := TextInput {
@@ -867,8 +867,8 @@ export component AppWindow inherits Window {
                                         width: parent.width;
                                         height: parent.height;
                                         horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
-                                        viewport-width: self.visible-width;
-                                        viewport-height: max(self.visible-height, terminal-input.preferred-height);
+                                        content-width: self.visible-width;
+                                        content-height: max(self.visible-height, terminal-input.preferred-height);
 
                                     terminal-input := TextInput {
                                         private property <int> focus-request: root.terminal-focus-request;
@@ -894,10 +894,10 @@ export component AppWindow inherits Window {
                                         }
                                         changed blur-request => { self.clear-focus(); }
                                         cursor-position-changed(cursor-position) => {
-                                            if cursor-position.y + terminal-input-scroll.viewport-y < 4px {
-                                                terminal-input-scroll.viewport-y = min(0px, -cursor-position.y + 4px);
-                                            } else if cursor-position.y + terminal-input-scroll.viewport-y > terminal-input-scroll.visible-height - 22px {
-                                                terminal-input-scroll.viewport-y = min(0px, terminal-input-scroll.visible-height - cursor-position.y - 22px);
+                                            if cursor-position.y + terminal-input-scroll.content-y < 4px {
+                                                terminal-input-scroll.content-y = min(0px, -cursor-position.y + 4px);
+                                            } else if cursor-position.y + terminal-input-scroll.content-y > terminal-input-scroll.visible-height - 22px {
+                                                terminal-input-scroll.content-y = min(0px, terminal-input-scroll.visible-height - cursor-position.y - 22px);
                                             }
                                         }
                                         key-pressed(event) => {

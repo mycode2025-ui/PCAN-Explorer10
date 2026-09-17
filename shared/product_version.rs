@@ -23,6 +23,11 @@ fn development_version() -> Option<String> {
     }
 
     let mut candidates = Vec::new();
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    candidates.push(manifest_dir.join("product-version.txt"));
+    if let Some(workspace) = manifest_dir.parent() {
+        candidates.push(workspace.join("product-version.txt"));
+    }
     if let Ok(cwd) = std::env::current_dir() {
         candidates.push(cwd.join("product-version.txt"));
     }
@@ -65,7 +70,7 @@ mod tests {
 
     #[test]
     fn debug_binary_uses_workspace_product_version() {
-        let expected = std::fs::read_to_string("product-version.txt").unwrap();
+        let expected = include_str!("../product-version.txt");
         assert_eq!(current(), expected.trim());
     }
 }
