@@ -130,6 +130,8 @@ export component AppWindow inherits Window {
     in-out property <string> f-name;
     in-out property <string> f-data;
     in-out property <int> dir-filter: 0; // 0=全部 1=Rx 2=Tx
+    in-out property <bool> log-error-frames: true;
+    in-out property <bool> log-error-counter-changes: true;
 
     callback connect();
     callback disconnect();
@@ -162,6 +164,7 @@ export component AppWindow inherits Window {
     callback set-frame-id-format(int);
     callback set-dir-filter(int);
     callback clear-filter();
+    callback set-error-logging(bool, bool);
     callback tx-add();
     callback tx-remove(int);
     callback tx-send-once(int);
@@ -533,9 +536,6 @@ export component AppWindow inherits Window {
                         }
                         TBtn { text: I18n.en ? "Apply" : "应用筛选"; btn-enabled: !root.filter-invalid; primary: true; clicked => { root.apply-filter(); } }
                         TBtn { text: I18n.en ? "Reset filter" : "重置筛选"; clicked => { root.clear-filter(); } }
-
-
-
                     } }
                 }
 
@@ -545,6 +545,18 @@ export component AppWindow inherits Window {
                     Rectangle { width: 100%; height: 1px; y: parent.height - 1px; background: Theme.border; }
                     ScrollView { HorizontalLayout {
                         padding: 4px; spacing: 3px; alignment: start;
+                        Text { text: I18n.en ? "Error logging:" : "错误记录:"; vertical-alignment: center; font-size: Theme.fs; font-weight: 600; color: Theme.text-dim; }
+                        CheckBox {
+                            text: I18n.en ? "Log Error Frames" : "记录错误帧";
+                            checked: root.log-error-frames;
+                            toggled => { root.log-error-frames = self.checked; root.set-error-logging(root.log-error-frames, root.log-error-counter-changes); }
+                        }
+                        CheckBox {
+                            text: I18n.en ? "Log Error Counter Changes" : "记录错误计数器变化";
+                            checked: root.log-error-counter-changes;
+                            toggled => { root.log-error-counter-changes = self.checked; root.set-error-logging(root.log-error-frames, root.log-error-counter-changes); }
+                        }
+                        Rectangle { width: 1px; background: Theme.border; }
                         Text { text: (I18n.en ? "Selected: " : "选中行: ") + root.sel-id; vertical-alignment: center; font-size: Theme.fs; color: Theme.text; }
                         Rectangle { width: 8px; }
                         TBtn { text: I18n.en ? "Only this ID" : "只显示该ID"; clicked => { root.sel-only-id(); } }
@@ -1469,8 +1481,8 @@ export component AppWindow inherits Window {
                         width: detail-scroll.visible-width; padding: 8px; spacing: 12px;
                         Text {
                             text: root.detail-page == 1 ? root.capture-health : root.detail-page == 3 ? root.update-notes : (I18n.en
-                                ? "ID is hexadecimal: 180 matches one ID; 100-1FF matches a range; separate terms with commas; !200 excludes ID 200. Empty means all.\n\nName matches a substring; BMS* matches a prefix, *BMS a suffix, !BMS excludes.\n\nData matches consecutive hex bytes, e.g. 01 02. Separate bytes with spaces. This is a filter, not a frame editor.\n\nID, Name, Data and Direction are applied together. Invalid input leaves the active filter unchanged.\n\nTrace 300/750/1500 selects the displayed rolling window only; capture and recording are unchanged. Disable auto-scroll to inspect a stable view.\n\nStatus: "
-                                : "ID 按十六进制填写：180 匹配单个 ID；100-1FF 匹配范围；逗号分隔多个条件；!200 排除 ID 200。留空匹配全部。\n\n名称按包含匹配；BMS* 匹配前缀，*BMS 匹配后缀，!BMS 排除名称。\n\nData 按连续字节匹配，例如 01 02，用空格分隔。这是筛选条件，不是报文编辑器。\n\nID、名称、Data 和方向一起点击“应用筛选”生效。输入有误时保留旧筛选，不会悄悄忽略错误。\n\nTrace 300/750/1500 仅控制实时显示窗口，不影响采集缓存与记录。关闭自动滚动后可稳定查看当前表格。\n\n当前状态：") + root.filter-feedback;
+                                ? "ID is hexadecimal: 180 matches one ID; 100-1FF matches a range; separate terms with commas; !200 excludes ID 200. Empty means all.\n\nName matches a substring; BMS* matches a prefix, *BMS a suffix, !BMS excludes.\n\nData matches consecutive hex bytes, e.g. 01 02. Separate bytes with spaces. This is a filter, not a frame editor.\n\nID, Name, Data and Direction are applied together. Invalid input leaves the active filter unchanged.\n\nLog Error Frames captures PCAN hardware error frames and ZLG channel faults. Log Error Counter Changes records RXErr/TXErr changes separately. Both options also control file recording and are enabled by default.\n\nTrace 300/750/1500 selects the displayed rolling window only; capture and recording are unchanged. Disable auto-scroll to inspect a stable view.\n\nStatus: "
+                                : "ID 按十六进制填写：180 匹配单个 ID；100-1FF 匹配范围；逗号分隔多个条件；!200 排除 ID 200。留空匹配全部。\n\n名称按包含匹配；BMS* 匹配前缀，*BMS 匹配后缀，!BMS 排除名称。\n\nData 按连续字节匹配，例如 01 02，用空格分隔。这是筛选条件，不是报文编辑器。\n\nID、名称、Data 和方向一起点击“应用筛选”生效。输入有误时保留旧筛选，不会悄悄忽略错误。\n\n“记录错误帧”采集 PCAN 硬件错误帧及 ZLG 通道故障；“记录错误计数器变化”单独记录 RXErr/TXErr 变化。两项也控制文件记录，默认均开启。\n\nTrace 300/750/1500 仅控制实时显示窗口，不影响采集缓存与记录。关闭自动滚动后可稳定查看当前表格。\n\n当前状态：") + root.filter-feedback;
                             wrap: word-wrap; color: Theme.text; font-size: Theme.fs;
                         }
                     }

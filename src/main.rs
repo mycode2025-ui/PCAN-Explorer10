@@ -921,6 +921,8 @@ pub(crate) struct App {
     pub(crate) paused: bool,
     autoscroll: bool,
     recording: bool,
+    log_error_frames: bool,
+    log_error_counter_changes: bool,
     pub(crate) connected: bool,
     pub(crate) connected_channels: std::collections::HashSet<u8>,
     shutdown_requested: bool,
@@ -1239,10 +1241,18 @@ impl App {
     }
 
     fn ingest(&mut self, f: CanFrame, playback_frame: bool) {
+        if !self.should_log_frame(&f) {
+            return;
+        }
         self.ingest_impl(f, playback_frame, true);
     }
 
-    fn ingest_batch(&mut self, frames: Vec<CanFrame>, playback_frame: bool) {
+    fn should_log_frame(&self, frame: &CanFrame) -> bool {
+        should_log_error_frame(frame, self.log_error_frames, self.log_error_counter_changes)
+    }
+
+    fn ingest_batch(&mut self, mut frames: Vec<CanFrame>, playback_frame: bool) {
+        frames.retain(|frame| self.should_log_frame(frame));
         // Trigger actions may start or stop recording at an exact frame boundary.
         if self.trigger.is_some() {
             for frame in frames {
@@ -1432,10 +1442,13 @@ impl App {
         cs.win_frames += 1;
         cs.win_bits += bits;
 
-        let name = self
-            .dbc_message_name_frame(f.id, f.ext)
-            .unwrap_or("")
-            .to_string();
+        let name = if f.error {
+            error_frame_name(&f)
+        } else {
+            self.dbc_message_name_frame(f.id, f.ext)
+                .unwrap_or("")
+                .to_string()
+        };
 
         if self.recording
             && record_frame
@@ -1571,6 +1584,34 @@ pub(crate) fn id_str(id: u32, ext: bool) -> String {
     } else {
         format!("0x{id:03X}")
     }
+}
+
+fn should_log_error_frame(
+    frame: &CanFrame,
+    log_error_frames: bool,
+    log_error_counter_changes: bool,
+) -> bool {
+    !frame.error
+        || if frame.id == 0 {
+            log_error_counter_changes
+        } else {
+            log_error_frames
+        }
+}
+
+fn error_frame_name(frame: &CanFrame) -> String {
+    let rx = frame.data.get(2).copied().unwrap_or(0);
+    let tx = frame.data.get(3).copied().unwrap_or(0);
+    if frame.id == 0 {
+        return format!("错误计数器变化 (RXErr={rx}, TXErr={tx})");
+    }
+    let kind = match frame.id {
+        1 => "位错误",
+        2 => "格式错误",
+        4 => "填充错误",
+        _ => "总线错误",
+    };
+    format!("{kind} (RXErr={rx}, TXErr={tx})")
 }
 
 const COL_DEFAULTS: &[(&str, f32)] = &[
@@ -2717,6 +2758,36 @@ use project_state::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn error_frame(id: u32, rx: u8, tx: u8) -> CanFrame {
+        CanFrame {
+            t: 0.0,
+            ch: 1,
+            tx: false,
+            id,
+            ext: false,
+            fd: false,
+            brs: false,
+            remote: false,
+            error: true,
+            data: vec![0, 0, rx, tx],
+        }
+    }
+
+    #[test]
+    fn error_logging_options_separate_faults_from_counter_changes() {
+        let fault = error_frame(8, 3, 7);
+        let counters = error_frame(0, 4, 9);
+        assert!(should_log_error_frame(&fault, true, false));
+        assert!(!should_log_error_frame(&counters, true, false));
+        assert!(!should_log_error_frame(&fault, false, true));
+        assert!(should_log_error_frame(&counters, false, true));
+        assert_eq!(error_frame_name(&fault), "总线错误 (RXErr=3, TXErr=7)");
+        assert_eq!(
+            error_frame_name(&counters),
+            "错误计数器变化 (RXErr=4, TXErr=9)"
+        );
+    }
 
     #[test]
     fn playback_loop_detects_time_rollback_but_not_equal_timestamps() {

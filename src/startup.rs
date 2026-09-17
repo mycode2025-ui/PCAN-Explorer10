@@ -222,6 +222,8 @@ pub(super) fn main() -> Result<(), Box<dyn std::error::Error>> {
         paused: false,
         autoscroll: true,
         recording: false,
+        log_error_frames: true,
+        log_error_counter_changes: true,
         connected: false,
         connected_channels: std::collections::HashSet::new(),
         shutdown_requested: false,

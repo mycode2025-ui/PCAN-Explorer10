@@ -823,6 +823,18 @@ fn wire_main(app: Rc<std::cell::RefCell<App>>, ui: &AppWindow, child_windows: Ch
     }
     {
         let app = app.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_set_error_logging(move |frames, counters| {
+            let mut a = app.borrow_mut();
+            a.log_error_frames = frames;
+            a.log_error_counter_changes = counters;
+            if let Some(ui) = ui_weak.upgrade() {
+                persist_settings(&mut a, &ui);
+            }
+        });
+    }
+    {
+        let app = app.clone();
         ui.on_set_dir_filter(move |idx| {
             let mut a = app.borrow_mut();
             a.filter.dir_filter = dir_idx_to_opt(idx);

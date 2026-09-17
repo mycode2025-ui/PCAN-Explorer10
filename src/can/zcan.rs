@@ -897,6 +897,8 @@ pub struct ZcanFdBus {
     pub(super) last_health_check: Instant,
     pub(super) last_error_code: u32,
     pub(super) last_busoff_recovery: Option<Instant>,
+    pub(super) last_error_counters: Option<(u8, u8)>,
+    pub(super) pending_error_frames: Vec<CanFrame>,
 }
 
 impl ZcanFdBus {
@@ -1075,6 +1077,8 @@ impl ZcanFdBus {
                 last_health_check: Instant::now() - Duration::from_secs(1),
                 last_error_code: 0,
                 last_busoff_recovery: None,
+                last_error_counters: None,
+                pending_error_frames: Vec::new(),
             })
         }
     }
@@ -1121,11 +1125,6 @@ impl ZcanFdBus {
                 .filter(|read| read(ch, &mut error_info) == 1)
                 .map(|_| error_info.error_code)
                 .unwrap_or(0);
-            if error_code == 0 {
-                self.last_error_code = 0;
-                return PollReport::default();
-            }
-
             let mut status = ZcanChannelStatus::default();
             let channel_status = self
                 .device
@@ -1134,12 +1133,59 @@ impl ZcanFdBus {
                 .ok()
                 .filter(|read| read(ch, &mut status) == 1)
                 .map(|_| status);
+            if let Some(status) = channel_status {
+                let counters = (status.reg_re_counter, status.reg_te_counter);
+                if self
+                    .last_error_counters
+                    .is_some_and(|previous| previous != counters)
+                {
+                    self.pending_error_frames.push(CanFrame {
+                        t: self.start.elapsed().as_secs_f64(),
+                        ch: 1,
+                        tx: false,
+                        id: 0,
+                        ext: false,
+                        fd: false,
+                        brs: false,
+                        remote: false,
+                        error: true,
+                        data: vec![0, status.reg_ec_capture, counters.0, counters.1],
+                    });
+                }
+                self.last_error_counters = Some(counters);
+            }
+            if error_code == 0 {
+                self.last_error_code = 0;
+                return PollReport::default();
+            }
             let is_new_error = error_code != self.last_error_code;
             self.last_error_code = error_code;
             let overflow = error_code
                 & (ERROR_CAN_OVERFLOW | ERROR_CAN_BUFFER_OVERFLOW | ERROR_BUFFEROVERFLOW)
                 != 0;
             let mut message = zcan_error_message(error_code, channel_status);
+            if is_new_error {
+                let status = channel_status.unwrap_or_default();
+                let mut data = vec![
+                    0,
+                    status.reg_ec_capture,
+                    status.reg_re_counter,
+                    status.reg_te_counter,
+                ];
+                data.extend_from_slice(&error_code.to_le_bytes());
+                self.pending_error_frames.push(CanFrame {
+                    t: self.start.elapsed().as_secs_f64(),
+                    ch: 1,
+                    tx: false,
+                    id: 8,
+                    ext: false,
+                    fd: false,
+                    brs: false,
+                    remote: false,
+                    error: true,
+                    data,
+                });
+            }
 
             if error_code & ERROR_CAN_BUSOFF != 0
                 && self
@@ -1216,6 +1262,10 @@ impl CanAdapter for ZcanFdBus {
         use zcan_ffi::*;
         let ch = self.ch as ChHandle;
         let mut report = self.health_report(false);
+        for mut frame in self.pending_error_frames.drain(..) {
+            frame.ch = 1;
+            out.push(frame);
+        }
         if report.connection_lost {
             return report;
         }

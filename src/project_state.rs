@@ -14,6 +14,8 @@ pub(super) fn gather_settings(a: &App, ui: &AppWindow) -> settings::Settings {
         f_name: ui.get_f_name().to_string(),
         f_data: ui.get_f_data().to_string(),
         dir_filter: ui.get_dir_filter(),
+        log_error_frames: a.log_error_frames,
+        log_error_counter_changes: a.log_error_counter_changes,
         dbc_path: None,
         dbc_paths: a.dbc_paths.clone(),
         left_w: ui.get_left_w(),
@@ -163,6 +165,10 @@ pub(super) fn apply_settings(a: &mut App, ui: &AppWindow, s: &settings::Settings
     );
     ui.set_console_ch(a.console_ch as i32);
     a.mode_trace = s.mode_trace;
+    a.log_error_frames = s.log_error_frames;
+    a.log_error_counter_changes = s.log_error_counter_changes;
+    ui.set_log_error_frames(a.log_error_frames);
+    ui.set_log_error_counter_changes(a.log_error_counter_changes);
     a.time_mode = s.time_mode;
     ui.set_time_mode(s.time_mode);
     a.cols_hidden = s

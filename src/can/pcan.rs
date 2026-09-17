@@ -8,6 +8,7 @@ pub(super) mod pcan_ffi {
     pub type FnRead = unsafe extern "system" fn(u16, *mut TPCANMsg, *mut TPCANTimestamp) -> u32;
     pub type FnWrite = unsafe extern "system" fn(u16, *const TPCANMsg) -> u32;
     pub type FnGetValue = unsafe extern "system" fn(u16, u8, *mut std::ffi::c_void, u32) -> u32;
+    pub type FnSetValue = unsafe extern "system" fn(u16, u8, *const std::ffi::c_void, u32) -> u32;
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -43,6 +44,8 @@ pub(super) mod pcan_ffi {
     pub const PCAN_ERROR_INITIALIZE: u32 = 0x0400_0000;
     pub const PCAN_ATTACHED_CHANNELS_COUNT: u8 = 0x2A;
     pub const PCAN_ATTACHED_CHANNELS: u8 = 0x2B;
+    pub const PCAN_ALLOW_ERROR_FRAMES: u8 = 0x20;
+    pub const PCAN_PARAMETER_ON: u32 = 1;
     pub const PCAN_FEATURE_FD_CAPABLE: u32 = 0x01;
 
     pub const MSGTYPE_STANDARD: u8 = 0x00;
@@ -76,6 +79,27 @@ pub(super) mod pcan_ffi {
         pub device_name: [std::os::raw::c_char; 33],
         pub device_id: u32,
         pub channel_condition: u32,
+    }
+}
+
+fn enable_error_frames(lib: &libloading::Library, channel: u16) -> Result<(), String> {
+    use pcan_ffi::*;
+    unsafe {
+        let set_value: libloading::Symbol<FnSetValue> = lib
+            .get(b"CAN_SetValue\0")
+            .map_err(|error| format!("找不到 CAN_SetValue: {error}"))?;
+        let enabled = PCAN_PARAMETER_ON;
+        let status = set_value(
+            channel,
+            PCAN_ALLOW_ERROR_FRAMES,
+            (&enabled as *const u32).cast(),
+            std::mem::size_of::<u32>() as u32,
+        );
+        if status == PCAN_ERROR_OK {
+            Ok(())
+        } else {
+            Err(format!("PCAN 启用错误帧接收失败，status=0x{status:08X}"))
+        }
     }
 }
 
@@ -358,6 +382,7 @@ impl PcanBus {
                     "CAN_Initialize 失败, status=0x{status:08X}（设备未连接、通道被其他程序占用或 PEAK 驱动不可用；请关闭其他 CAN 工具后重试）"
                 ));
             };
+            enable_error_frames(&lib, channel)?;
             Ok(Self {
                 lib,
                 channel,
@@ -421,6 +446,7 @@ impl PcanBus {
                 ));
             }
             drop(init_fd);
+            enable_error_frames(&lib, channel)?;
             Ok(Self {
                 lib,
                 channel,
@@ -481,7 +507,7 @@ impl CanAdapter for PcanBus {
                         report = pcan_poll_error(st);
                         break;
                     }
-                    if msg.msgtype & MSGTYPE_STATUS != 0 {
+                    if msg.msgtype & MSGTYPE_STATUS != 0 && msg.msgtype & MSGTYPE_ERRFRAME == 0 {
                         continue;
                     }
                     let is_fd = msg.msgtype & MSGTYPE_FD != 0;
@@ -536,7 +562,7 @@ impl CanAdapter for PcanBus {
                     report = pcan_poll_error(st);
                     break;
                 }
-                if msg.msgtype & MSGTYPE_STATUS != 0 {
+                if msg.msgtype & MSGTYPE_STATUS != 0 && msg.msgtype & MSGTYPE_ERRFRAME == 0 {
                     continue;
                 }
                 let len = (msg.len as usize).min(8);

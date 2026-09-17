@@ -27,6 +27,10 @@ pub struct Settings {
     pub f_data: String,
     #[serde(default)]
     pub dir_filter: i32,
+    #[serde(default = "default_true")]
+    pub log_error_frames: bool,
+    #[serde(default = "default_true")]
+    pub log_error_counter_changes: bool,
     #[serde(default)]
     pub dbc_path: Option<String>, // 旧版单 DBC 字段(向后兼容读取)
     #[serde(default)]
@@ -88,6 +92,8 @@ impl Default for Settings {
             f_name: String::new(),
             f_data: String::new(),
             dir_filter: 0,
+            log_error_frames: true,
+            log_error_counter_changes: true,
             dbc_path: None,
             dbc_paths: Vec::new(),
             left_w: 0.0,
@@ -207,5 +213,12 @@ mod tests {
         let text = serde_json::to_string(&settings).unwrap();
         let restored: Settings = serde_json::from_str(&text).unwrap();
         assert_eq!(restored.recent_project_paths, settings.recent_project_paths);
+    }
+
+    #[test]
+    fn old_settings_enable_error_logging_by_default() {
+        let restored: Settings = serde_json::from_str("{}").unwrap();
+        assert!(restored.log_error_frames);
+        assert!(restored.log_error_counter_changes);
     }
 }
