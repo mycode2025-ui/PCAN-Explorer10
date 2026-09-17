@@ -520,22 +520,33 @@ export component AppWindow inherits Window {
                     height: Theme.ctrl-h + 10px; background: Theme.panel2;
                     ScrollView { HorizontalLayout {
                         padding: 4px; spacing: 3px; alignment: start;
-                        Text { text: I18n.en ? "Filter" : "筛选"; vertical-alignment: center; font-size: Theme.fs; font-weight: 600; color: Theme.text-dim; }
                         Text { text: "ID:"; vertical-alignment: center; font-size: Theme.fs; }
-                        LineEdit { width: 132px; height: Theme.ctrl-h; placeholder-text: "180 / 100-1FF"; text <=> root.f-id; accepted => { root.apply-filter(); } }
+                        LineEdit { width: 110px; height: Theme.ctrl-h; placeholder-text: "180 / 100-1FF"; text <=> root.f-id; accepted => { root.apply-filter(); } }
                         Text { text: I18n.en ? "Name:" : "名称:"; vertical-alignment: center; font-size: Theme.fs; }
-                        LineEdit { width: 90px; height: Theme.ctrl-h; placeholder-text: "BMS"; text <=> root.f-name; }
+                        LineEdit { width: 70px; height: Theme.ctrl-h; placeholder-text: "BMS"; text <=> root.f-name; }
                         Text { text: I18n.en ? "Data:" : "数据:"; vertical-alignment: center; font-size: Theme.fs; }
-                        LineEdit { width: 90px; height: Theme.ctrl-h; placeholder-text: "01 02"; text <=> root.f-data; }
+                        LineEdit { width: 70px; height: Theme.ctrl-h; placeholder-text: "01 02"; text <=> root.f-data; }
                         Text { text: I18n.en ? "Dir:" : "方向:"; vertical-alignment: center; font-size: Theme.fs; }
                         ComboBox {
-                            width: 80px; height: Theme.ctrl-h;
+                            width: 70px; height: Theme.ctrl-h;
                             model: I18n.en ? ["All", "Rx", "Tx"] : ["全部", "Rx", "Tx"];
                             current-index <=> root.dir-filter;
                             selected => { /* Applied together with the other filter fields. */ }
                         }
                         TBtn { text: I18n.en ? "Apply" : "应用筛选"; btn-enabled: !root.filter-invalid; primary: true; clicked => { root.apply-filter(); } }
-                        TBtn { text: I18n.en ? "Reset filter" : "重置筛选"; clicked => { root.clear-filter(); } }
+                        TBtn { text: I18n.en ? "Reset" : "重置"; clicked => { root.clear-filter(); } }
+                        Rectangle { width: 1px; background: Theme.border; }
+                        Text { text: I18n.en ? "Errors:" : "错误:"; vertical-alignment: center; font-size: Theme.fs; font-weight: 600; color: Theme.text-dim; }
+                        CheckBox {
+                            text: I18n.en ? "Frames" : "错误帧";
+                            checked: root.log-error-frames;
+                            toggled => { root.log-error-frames = self.checked; root.set-error-logging(root.log-error-frames, root.log-error-counter-changes); }
+                        }
+                        CheckBox {
+                            text: I18n.en ? "Counter changes" : "错误计数器变化";
+                            checked: root.log-error-counter-changes;
+                            toggled => { root.log-error-counter-changes = self.checked; root.set-error-logging(root.log-error-frames, root.log-error-counter-changes); }
+                        }
                     } }
                 }
 
@@ -545,18 +556,6 @@ export component AppWindow inherits Window {
                     Rectangle { width: 100%; height: 1px; y: parent.height - 1px; background: Theme.border; }
                     ScrollView { HorizontalLayout {
                         padding: 4px; spacing: 3px; alignment: start;
-                        Text { text: I18n.en ? "Error logging:" : "错误记录:"; vertical-alignment: center; font-size: Theme.fs; font-weight: 600; color: Theme.text-dim; }
-                        CheckBox {
-                            text: I18n.en ? "Log Error Frames" : "记录错误帧";
-                            checked: root.log-error-frames;
-                            toggled => { root.log-error-frames = self.checked; root.set-error-logging(root.log-error-frames, root.log-error-counter-changes); }
-                        }
-                        CheckBox {
-                            text: I18n.en ? "Log Error Counter Changes" : "记录错误计数器变化";
-                            checked: root.log-error-counter-changes;
-                            toggled => { root.log-error-counter-changes = self.checked; root.set-error-logging(root.log-error-frames, root.log-error-counter-changes); }
-                        }
-                        Rectangle { width: 1px; background: Theme.border; }
                         Text { text: (I18n.en ? "Selected: " : "选中行: ") + root.sel-id; vertical-alignment: center; font-size: Theme.fs; color: Theme.text; }
                         Rectangle { width: 8px; }
                         TBtn { text: I18n.en ? "Only this ID" : "只显示该ID"; clicked => { root.sel-only-id(); } }
