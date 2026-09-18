@@ -2,7 +2,7 @@
 ; 闁诲海鎳撻ˇ鎶剿夋繝鍥х?C:\Program Files\PCAN-Explorer10闂佹寧绋戦悧鎾炽€掗崜浣轰笉闁挎稑瀚崐鐐烘煕濞戞鎴濐焽閸儲鈷旈柟鏉垮缁€澶愭煟?PrivilegesRequired=admin 闁荤喐鐟辩粻鎴ｃ亹?UAC 闂佸湱绮崝鏍ь焽閸儲鏅璺虹墐閸?; 闂佺懓鐏氶幐鍝モ偓鍨戠粙澶嬪緞婢舵劕娈濋梺缁樼懐閸撴盯鎮?exe闂佹寧绋戝绌媋nwork / 婵炴垶鎸昏ぐ鍐亹濞戞﹩鍟呴柕澶堝劚瀵?/ Modbus 閻庤鎮堕崕閬嶅矗閸ф鏅? 闂佺绻堥崝鎴﹀磿閹绢喖鍌ㄩ柛灞剧濞?CAN 婵＄偟鎳撳畷顒佹叏?DLL + 闁哄鏅滈崝姗€銆侀幋锕€绫嶉柤绋跨仛濞堝爼鏌熺拠鈥虫灁闁?; 缂傚倸鍊归悧鐐烘儊? ISCC.exe installer\pcanwork.iss
 
 #define Root SourcePath + "\.."
-#define AppVer "0.6.4"
+#define AppVer "0.7.0"
 
 [Setup]
 AppId={{2BD0E569-4F8D-4B31-A43A-5332CE87A30A}
