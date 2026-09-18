@@ -269,7 +269,7 @@ fn append_frame_object(payload: &mut Vec<u8>, f: &CanFrame) {
         payload.extend_from_slice(&flags_ext.to_le_bytes());
         payload.extend_from_slice(&0u16.to_le_bytes());
         payload.extend_from_slice(&f.data);
-        while payload.len() % 4 != 0 {
+        while !payload.len().is_multiple_of(4) {
             payload.push(0);
         }
         return;

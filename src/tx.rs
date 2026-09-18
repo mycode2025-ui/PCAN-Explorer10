@@ -502,55 +502,6 @@ fn format_tx_data_summary(data: &[u8]) -> String {
     format!("{head} … {tail} · {}B", data.len())
 }
 
-#[cfg(test)]
-mod tx_data_display_tests {
-    use super::{
-        build_tx_data_editor_rows, collect_tx_data_editor, edit_tx_data_editor_byte,
-        format_tx_data_summary, parse_tx_repeat, parse_tx_task_data, paste_tx_data_editor,
-    };
-    use slint::Model;
-
-    #[test]
-    fn classic_can_data_is_shown_in_full() {
-        let data = [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77];
-        assert_eq!(format_tx_data_summary(&data), "00 11 22 33 44 55 66 77");
-    }
-
-    #[test]
-    fn can_fd_data_uses_summary_and_eight_byte_rows() {
-        let data: Vec<u8> = (0..64).collect();
-        assert_eq!(format_tx_data_summary(&data), "00 01 02 03 … 3E 3F · 64B");
-        let rows = build_tx_data_editor_rows(&data, data.len());
-        assert_eq!(rows.row_count(), 8);
-        assert_eq!(collect_tx_data_editor(&rows, 64).unwrap(), data);
-        edit_tx_data_editor_byte(&rows, 63, "a5");
-        assert_eq!(collect_tx_data_editor(&rows, 64).unwrap()[63], 0xA5);
-    }
-
-    #[test]
-    fn continuous_hex_paste_is_supported_and_clamped() {
-        assert_eq!(
-            parse_tx_task_data("00112233445566778899", 8),
-            [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77]
-        );
-        let rows = build_tx_data_editor_rows(&[0; 8], 8);
-        assert_eq!(paste_tx_data_editor(&rows, "0011223344556677", 8), 8);
-        assert_eq!(
-            collect_tx_data_editor(&rows, 8).unwrap(),
-            [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77]
-        );
-    }
-
-    #[test]
-    fn repeat_field_supports_finite_and_continuous_sending() {
-        assert_eq!(parse_tx_repeat("25"), 25);
-        assert_eq!(parse_tx_repeat("-1"), -1);
-        assert_eq!(parse_tx_repeat("0"), -1);
-        assert_eq!(parse_tx_repeat(""), -1);
-        assert_eq!(parse_tx_repeat("invalid"), 1);
-    }
-}
-
 /// Signature of everything shown in the send-task list (so we only rebuild on change).
 pub(crate) fn tx_list_sig(a: &App) -> u64 {
     use std::hash::{Hash, Hasher};
@@ -685,5 +636,54 @@ pub(crate) fn build_tx_dbc_page(a: &mut App, tx_window: &TxWindow) {
         }
         tx_window.set_tx_sel_title(title.into());
         tx_window.set_tx_dbc_sigs(ModelRc::from(Rc::new(VecModel::from(sig_rows))));
+    }
+}
+
+#[cfg(test)]
+mod tx_data_display_tests {
+    use super::{
+        build_tx_data_editor_rows, collect_tx_data_editor, edit_tx_data_editor_byte,
+        format_tx_data_summary, parse_tx_repeat, parse_tx_task_data, paste_tx_data_editor,
+    };
+    use slint::Model;
+
+    #[test]
+    fn classic_can_data_is_shown_in_full() {
+        let data = [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77];
+        assert_eq!(format_tx_data_summary(&data), "00 11 22 33 44 55 66 77");
+    }
+
+    #[test]
+    fn can_fd_data_uses_summary_and_eight_byte_rows() {
+        let data: Vec<u8> = (0..64).collect();
+        assert_eq!(format_tx_data_summary(&data), "00 01 02 03 … 3E 3F · 64B");
+        let rows = build_tx_data_editor_rows(&data, data.len());
+        assert_eq!(rows.row_count(), 8);
+        assert_eq!(collect_tx_data_editor(&rows, 64).unwrap(), data);
+        edit_tx_data_editor_byte(&rows, 63, "a5");
+        assert_eq!(collect_tx_data_editor(&rows, 64).unwrap()[63], 0xA5);
+    }
+
+    #[test]
+    fn continuous_hex_paste_is_supported_and_clamped() {
+        assert_eq!(
+            parse_tx_task_data("00112233445566778899", 8),
+            [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77]
+        );
+        let rows = build_tx_data_editor_rows(&[0; 8], 8);
+        assert_eq!(paste_tx_data_editor(&rows, "0011223344556677", 8), 8);
+        assert_eq!(
+            collect_tx_data_editor(&rows, 8).unwrap(),
+            [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77]
+        );
+    }
+
+    #[test]
+    fn repeat_field_supports_finite_and_continuous_sending() {
+        assert_eq!(parse_tx_repeat("25"), 25);
+        assert_eq!(parse_tx_repeat("-1"), -1);
+        assert_eq!(parse_tx_repeat("0"), -1);
+        assert_eq!(parse_tx_repeat(""), -1);
+        assert_eq!(parse_tx_repeat("invalid"), 1);
     }
 }

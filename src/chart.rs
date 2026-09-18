@@ -451,7 +451,7 @@ pub(crate) fn refresh_chart(a: &App, ui: &AppWindow, chart_window: &ChartWindow)
             }
             // Cursor value: linear interpolation on the decimated polyline at cursor_time.
             let cursor_val = if a.chart_cursor && has && !pts.is_empty() {
-                Some(interp_pts(&pts, cursor_time))
+                Some(interp_pts(pts, cursor_time))
             } else {
                 None
             };
@@ -465,7 +465,7 @@ pub(crate) fn refresh_chart(a: &App, ui: &AppWindow, chart_window: &ChartWindow)
             };
             // Second cursor value (dual-cursor mode).
             let cursor_val2 = if a.chart_cursor && dual && has && !pts.is_empty() {
-                Some(interp_pts(&pts, cursor_time2))
+                Some(interp_pts(pts, cursor_time2))
             } else {
                 None
             };

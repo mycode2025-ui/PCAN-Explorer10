@@ -31,14 +31,14 @@ fn development_version() -> Option<String> {
     if let Ok(cwd) = std::env::current_dir() {
         candidates.push(cwd.join("product-version.txt"));
     }
-    if let Ok(executable) = std::env::current_exe() {
-        if let Some(workspace) = executable
+    if let Some(workspace) = std::env::current_exe().ok().and_then(|executable| {
+        executable
             .parent()
             .and_then(std::path::Path::parent)
             .and_then(std::path::Path::parent)
-        {
-            candidates.push(workspace.join("product-version.txt"));
-        }
+            .map(std::path::Path::to_owned)
+    }) {
+        candidates.push(workspace.join("product-version.txt"));
     }
 
     candidates.into_iter().find_map(|path| {
@@ -54,25 +54,6 @@ fn is_three_part_version(value: &str) -> bool {
         && matches!(parts.next(), Some(part) if !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
         && matches!(parts.next(), Some(part) if !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
         && parts.next().is_none()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{current, is_three_part_version};
-
-    #[test]
-    fn accepts_product_semver_and_rejects_truncated_or_decorated_values() {
-        assert!(is_three_part_version("0.3.20"));
-        assert!(!is_three_part_version("0.3"));
-        assert!(!is_three_part_version("v0.3.20"));
-        assert!(!is_three_part_version("0.3.20-beta"));
-    }
-
-    #[test]
-    fn debug_binary_uses_workspace_product_version() {
-        let expected = include_str!("../product-version.txt");
-        assert_eq!(current(), expected.trim());
-    }
 }
 
 #[cfg(windows)]
@@ -153,4 +134,23 @@ fn executable_version() -> Option<String> {
 #[cfg(not(windows))]
 fn executable_version() -> Option<String> {
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{current, is_three_part_version};
+
+    #[test]
+    fn accepts_product_semver_and_rejects_truncated_or_decorated_values() {
+        assert!(is_three_part_version("0.3.20"));
+        assert!(!is_three_part_version("0.3"));
+        assert!(!is_three_part_version("v0.3.20"));
+        assert!(!is_three_part_version("0.3.20-beta"));
+    }
+
+    #[test]
+    fn debug_binary_uses_workspace_product_version() {
+        let expected = include_str!("../product-version.txt");
+        assert_eq!(current(), expected.trim());
+    }
 }

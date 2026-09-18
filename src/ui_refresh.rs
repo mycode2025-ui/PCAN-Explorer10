@@ -74,6 +74,53 @@ pub(super) fn refresh_ui(a: &mut App, ui: &AppWindow, child_windows: Option<&Chi
         )
         .into(),
     );
+    ui.set_diag_ui_latency(
+        format!(
+            "{:.1} / {:.1} ms",
+            a.table_cache.ui_ms, a.table_cache.ui_peak_ms
+        )
+        .into(),
+    );
+    ui.set_diag_table_latency(
+        format!(
+            "{:.1} / {:.1} ms",
+            a.table_cache.refresh_ms, a.table_cache.peak_ms
+        )
+        .into(),
+    );
+    ui.set_diag_updated_rows(a.table_cache.updated_rows.to_string().into());
+    ui.set_diag_rx_queue(
+        format!("{} / {}", a.capture_queue_depth, a.capture_queue_capacity).into(),
+    );
+    ui.set_diag_rx_peak(a.capture_queue_high_watermark.to_string().into());
+    ui.set_diag_rx_drops(a.capture_dropped_frames.to_string().into());
+    ui.set_diag_command_queue(
+        format!("{} / {}", a.command_queue_depth, a.command_queue_capacity).into(),
+    );
+    ui.set_diag_command_peak(a.command_queue_high_watermark.to_string().into());
+    ui.set_diag_command_rejected(a.command_rejected.to_string().into());
+    ui.set_diag_record_queue(
+        format!(
+            "{} / {}",
+            a.recorder.queue_depth(),
+            a.recorder.queue_capacity()
+        )
+        .into(),
+    );
+    ui.set_diag_record_peak(a.recorder.queue_high_watermark().to_string().into());
+    ui.set_diag_record_drops(a.recorder.dropped_frames().to_string().into());
+    ui.set_diag_hardware_overruns(a.capture_hardware_overruns.to_string().into());
+    ui.set_diag_hardware_errors(a.capture_hardware_errors.to_string().into());
+    ui.set_diag_time_samples(a.timestamp_samples.to_string().into());
+    ui.set_diag_time_jitter(
+        format!(
+            "{:.0} / {:.0} us",
+            a.timestamp_latest_jitter_us, a.timestamp_max_jitter_us
+        )
+        .into(),
+    );
+    ui.set_diag_time_drift(format!("{:+.1} ppm", a.timestamp_drift_ppm).into());
+    ui.set_diag_time_nonmonotonic(a.timestamp_monotonic_violations.to_string().into());
     ui.set_capture_loss(
         a.capture_dropped_frames > 0
             || a.capture_dropped_events > 0

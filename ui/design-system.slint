@@ -206,12 +206,12 @@ export component ProductModal inherits Rectangle {
         Rectangle {
             background: ProductDesign.scrim;
             opacity: root.reveal ? 1 : 0;
-            animate opacity { duration: 180ms; easing: ease-out; }
+            animate opacity { duration: 80ms; easing: ease-out; }
             entrance-layer := Rectangle {
                 background: transparent;
                 transform-origin: { x: self.width / 2, y: self.height / 2 };
                 transform-scale: root.reveal ? 100% : 94%;
-                animate transform-scale { duration: 220ms; easing: spring(0.16); }
+                animate transform-scale { duration: 110ms; easing: ease-out; }
                 FocusScope {
                     focus-on-tab-navigation: false;
                     key-pressed(event) => {

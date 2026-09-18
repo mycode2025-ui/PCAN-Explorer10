@@ -286,11 +286,8 @@ fn wire_dialogs(
                         }
                     }
                     "hardware_label" => c.hardware_label = value.to_string(),
-                    "manual_mode" => {
-                        if value == "1" {
-                            c.hardware_id.clear();
-                        }
-                    }
+                    "manual_mode" if value == "1" => c.hardware_id.clear(),
+                    "manual_mode" => {}
                     "device_index" => {
                         c.device_index = value.trim().parse().unwrap_or(c.device_index)
                     }

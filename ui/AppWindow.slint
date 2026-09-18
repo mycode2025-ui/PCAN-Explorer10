@@ -3,6 +3,43 @@ import { Button, ComboBox, LineEdit, CheckBox, TabWidget, ListView, ScrollView, 
 import { ProductDesign, ProductModal } from "design-system.slint";
 import { ByteCell, SimRow, MsgRow, SigRow, TxSigRow, TxRow, PbFileRow, TreeRow, RecentProjectRow, ChanStat, IdStat, ChartSeries, DbcSignalRow, SignalPickRow, I18n, Theme, ColW, Cell, HCell, SortHeader, TBtn, Icon, RibbonBtn, RibbonGroup, RibbonTab, ConvTab, SimGlyph } from "common.slint";
 
+export component DiagnosticMetricTile inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <bool> alert: false;
+    height: 47px;
+    min-width: 0px;
+    preferred-width: 0px;
+    horizontal-stretch: 1;
+    border-radius: 10px;
+    background: root.alert ? Theme.warn.with-alpha(0.10) : Theme.panel;
+    border-width: 1px;
+    border-color: root.alert ? Theme.warn.with-alpha(0.42) : Theme.border;
+    VerticalLayout {
+        padding-left: 9px; padding-right: 8px; padding-top: 6px; padding-bottom: 5px; spacing: 1px;
+        Text { text: root.label; color: Theme.text-dim; font-size: 10px; vertical-alignment: center; overflow: elide; }
+        Text { text: root.value; color: root.alert ? Theme.warn : Theme.text; font-size: 13px; font-weight: 700; font-family: Theme.mono; vertical-alignment: center; overflow: elide; }
+    }
+}
+
+export component DiagnosticCard inherits Rectangle {
+    in property <string> title;
+    height: 146px;
+    min-width: 0px;
+    preferred-width: 0px;
+    horizontal-stretch: 1;
+    border-radius: 14px;
+    background: Theme.bg;
+    border-width: 1px;
+    border-color: Theme.border;
+    VerticalLayout {
+        alignment: start;
+        padding-left: 11px; padding-right: 11px; padding-top: 9px; padding-bottom: 10px; spacing: 7px;
+        Text { text: root.title; color: Theme.text; font-size: Theme.fs-sm; font-weight: 800; vertical-alignment: center; }
+        @children
+    }
+}
+
 export component AppWindow inherits Window {
     property <length> responsive-gap: 12px;
     property <length> visible-left-width: 232px;
@@ -99,6 +136,24 @@ export component AppWindow inherits Window {
     in property <string> tx-count: "0";
     in property <string> err-count: "0";
     in property <string> capture-health: "Q 0/0  H 0  Drop 0";
+    in property <string> diag-ui-latency: "0.0 / 0.0 ms";
+    in property <string> diag-table-latency: "0.0 / 0.0 ms";
+    in property <string> diag-updated-rows: "0";
+    in property <string> diag-rx-queue: "0 / 0";
+    in property <string> diag-rx-peak: "0";
+    in property <string> diag-rx-drops: "0";
+    in property <string> diag-command-queue: "0 / 0";
+    in property <string> diag-command-peak: "0";
+    in property <string> diag-command-rejected: "0";
+    in property <string> diag-record-queue: "0 / 0";
+    in property <string> diag-record-peak: "0";
+    in property <string> diag-record-drops: "0";
+    in property <string> diag-hardware-overruns: "0";
+    in property <string> diag-hardware-errors: "0";
+    in property <string> diag-time-samples: "0";
+    in property <string> diag-time-jitter: "0 / 0 us";
+    in property <string> diag-time-drift: "+0.0 ppm";
+    in property <string> diag-time-nonmonotonic: "0";
     in property <bool> capture-loss: false;
     in property <string> total-count: "0";
     in property <string> shown-count: "0";
@@ -929,17 +984,25 @@ export component AppWindow inherits Window {
             background: Theme.panel;
             Rectangle { width: 100%; height: 1px; y: 0; background: Theme.border; }
             HorizontalLayout {
-                padding-left: 10px; padding-right: 10px; spacing: 16px; alignment: start;
+                padding-left: 10px; padding-right: 122px; spacing: 16px; alignment: start;
                 Text { text: root.connected ? (I18n.en ? "● Connected" : "● 已连接") : (I18n.en ? "○ Disconnected" : "○ 未连接"); color: root.connected ? Theme.ok : Theme.text-dim; font-size: Theme.fs-sm; vertical-alignment: center; }
                 Text { text: root.running ? (I18n.en ? "Measuring" : "测量中") : (I18n.en ? "Stopped" : "已停止"); color: root.running ? Theme.ok : Theme.text-dim; font-size: Theme.fs-sm; vertical-alignment: center; }
                 Text { text: (I18n.en ? "Mode: " : "模式: ") + (root.mode-trace ? "Trace" : (I18n.en ? "Group" : "分组")); font-size: Theme.fs-sm; color: Theme.text-dim; vertical-alignment: center; }
                 Text { text: (I18n.en ? "Shown " : "显示 ") + root.shown-count + (I18n.en ? " / total " : " / 总 ") + root.total-count; font-size: Theme.fs-sm; color: Theme.text-dim; vertical-alignment: center; }
                 Text { text: (I18n.en ? "Sel: " : "选中: ") + root.sel-id; font-size: Theme.fs-sm; color: Theme.text-dim; vertical-alignment: center; }
-                TBtn { h: 22px; boxed: true; text: root.capture-loss ? (I18n.en ? "Warning / details" : "异常 / 详情") : (I18n.en ? "Diagnostics" : "运行诊断"); clicked => { root.detail-page = 1; } }
                 Rectangle { horizontal-stretch: 1; }
                 Text { text: "Rx " + root.rx-count + "  Tx " + root.tx-count + "  Err " + root.err-count; font-size: Theme.fs-sm; color: Theme.text-dim; vertical-alignment: center; }
                 Text { text: "FPS " + root.fps + (I18n.en ? "  Load " : "  负载 ") + root.bus-load; font-size: Theme.fs-sm; color: Theme.accent; vertical-alignment: center; }
                 if root.chan-load != "": Text { text: root.chan-load; max-width: 300px; overflow: elide; font-size: Theme.fs-sm; color: Theme.text-dim; vertical-alignment: center; }
+            }
+            TBtn {
+                x: parent.width - self.width - 10px;
+                y: (parent.height - self.height) / 2;
+                width: 96px;
+                h: 22px;
+                boxed: true;
+                text: root.capture-loss ? (I18n.en ? "Warning / details" : "异常 / 详情") : (I18n.en ? "Diagnostics" : "运行诊断");
+                clicked => { root.detail-page = 1; }
             }
         }
     }
@@ -1357,45 +1420,38 @@ export component AppWindow inherits Window {
 
     if root.update-toast-open && root.update-state == 3 && !root.license-open && !root.about-open: Rectangle {
         x: root.width - self.width - 18px;
-        y: root.height - self.height - 30px;
-        width: Math.min(400px, root.width - 36px);
-        height: Math.min(180px, root.height - 60px);
-        border-radius: 12px;
-        background: Theme.shadow;
-
-        Rectangle {
-            x: -4px;
-            y: -5px;
-            width: parent.width;
-            height: parent.height;
-            border-radius: 12px;
-            background: Theme.panel;
-            border-width: 1px;
-            border-color: Theme.border;
-
-            Rectangle { x: 0px; y: 0px; width: 5px; height: parent.height; background: Theme.ok; border-radius: 12px; }
-            VerticalLayout {
-                padding-left: 14px;
-                padding-right: 12px;
-                padding-top: 10px;
-                padding-bottom: 10px;
-                spacing: 5px;
+        y: root.height - self.height - 36px;
+        width: Math.min(398px, root.width - 36px);
+        height: Math.min(174px, root.height - 72px);
+        border-radius: 14px;
+        background: Theme.panel;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 20px;
+        drop-shadow-color: Theme.shadow;
+        drop-shadow-offset-y: 5px;
+        VerticalLayout {
+            spacing: 0px;
+            Rectangle {
+                height: 54px;
+                background: Theme.new-bg;
+                Rectangle { x: 0px; y: 0px; width: 4px; height: parent.height; background: Theme.ok; border-radius: 14px; }
                 HorizontalLayout {
-                    height: 30px;
-                    spacing: 7px;
+                    padding-left: 14px; padding-right: 9px; spacing: 10px;
                     Rectangle {
-                        width: 25px; height: 25px; border-radius: 13px; background: Theme.ok.with-alpha(0.16);
-                        Icon { x: 5px; y: 5px; width: 15px; height: 15px; name: "info"; clr: Theme.ok; }
+                        width: 32px; height: 32px; y: (parent.height - self.height) / 2;
+                        border-radius: 16px; background: Theme.ok.with-alpha(0.15);
+                        Icon { x: 7px; y: 7px; width: 18px; height: 18px; name: "info"; clr: Theme.ok; }
                     }
-                    Text {
-                        text: (I18n.en ? "New version available  " : "发现新版本  ") + "v" + root.update-version;
-                        color: Theme.text; font-size: Theme.fs; font-weight: 800; vertical-alignment: center;
+                    VerticalLayout {
+                        padding-top: 8px; padding-bottom: 7px; spacing: 0px;
+                        Text { text: I18n.en ? "New version available" : "发现新版本"; color: Theme.text; font-size: Theme.fs; font-weight: 800; vertical-alignment: center; }
+                        Text { text: (I18n.en ? "Version " : "版本 ") + "v" + root.update-version + (I18n.en ? " is ready" : " 已可下载"); color: Theme.ok; font-size: Theme.fs-sm; font-weight: 700; vertical-alignment: center; }
                     }
                     Rectangle { horizontal-stretch: 1; }
                     close-update := Rectangle {
-                        width: 34px;
-                        height: 30px;
-                        border-radius: Theme.radius;
+                        width: 32px; height: 32px; y: (parent.height - self.height) / 2;
+                        border-radius: 8px;
                         accessible-role: AccessibleRole.button;
                         accessible-label: I18n.en ? "Close update notification" : "关闭更新提示";
                         background: close-update-area.pressed ? Theme.panel2.darker(0.10)
@@ -1415,37 +1471,29 @@ export component AppWindow inherits Window {
                         }
                     }
                 }
-                TBtn { text: I18n.en ? "Read full release notes" : "查看完整更新内容"; boxed: true; clicked => { root.detail-page = 3; } }
-                Rectangle {
-                    vertical-stretch: 1;
-                    min-height: 32px;
-                    background: Theme.panel2;
-                    border-width: 1px;
-                    border-color: Theme.border;
-                    border-radius: 6px;
-                    ScrollView {
-                        x: 0px; y: 0px; width: parent.width; height: parent.height;
-                        content-width: self.visible-width;
-                        VerticalLayout {
-                            width: parent.visible-width;
-                            padding: 8px;
-                            Text {
-                                text: root.update-notes == ""
-                                    ? (I18n.en ? "A newer installer is ready to download." : "新版安装包已发布，可选择下载源。")
-                                    : root.update-notes;
-                                color: Theme.text-dim;
-                                font-size: Theme.fs-sm;
-                                wrap: word-wrap;
-                                vertical-alignment: top;
-                            }
-                        }
-                    }
+            }
+            Rectangle {
+                vertical-stretch: 1;
+                background: Theme.panel2;
+                clip: true;
+                Text {
+                    x: 16px; y: 10px; width: parent.width - 30px; height: parent.height - 18px;
+                    text: root.update-notes == ""
+                        ? (I18n.en ? "A newer installer is ready. Choose a download source below." : "新版安装包已发布，请选择下载源完成升级。")
+                        : root.update-notes;
+                    color: Theme.text-dim; font-size: Theme.fs-sm; wrap: word-wrap; vertical-alignment: top;
                 }
+            }
+            Rectangle {
+                height: 48px;
+                background: Theme.panel2;
+                Rectangle { x: 0px; y: 0px; width: parent.width; height: 1px; background: Theme.border; }
                 HorizontalLayout {
-                    height: Theme.ctrl-h; spacing: 9px;
+                    padding-left: 12px; padding-right: 10px; spacing: 7px;
+                    TBtn { width: 108px; h: 29px; text: I18n.en ? "What's new" : "更新内容"; boxed: true; clicked => { root.detail-page = 3; } }
                     Rectangle { horizontal-stretch: 1; }
-                    TBtn { width: 105px; text: I18n.en ? "Gitee download" : "Gitee 下载"; boxed: true; btn-enabled: root.update-gitee-url != ""; clicked => { root.open-update-gitee(); } }
-                    TBtn { width: 112px; text: I18n.en ? "GitHub download" : "GitHub 下载"; primary: true; btn-enabled: root.update-github-url != ""; clicked => { root.open-update-github(); } }
+                    TBtn { width: 86px; h: 29px; text: "Gitee"; boxed: true; btn-enabled: root.update-gitee-url != ""; clicked => { root.open-update-gitee(); } }
+                    TBtn { width: 92px; h: 29px; text: "GitHub"; primary: true; btn-enabled: root.update-github-url != ""; clicked => { root.open-update-github(); } }
                 }
             }
         }
@@ -1456,28 +1504,187 @@ export component AppWindow inherits Window {
         close-requested => { root.detail-page = 0; }
         TouchArea { clicked => { root.detail-page = 0; } }
         Rectangle {
-            width: min(root.detail-large ? 1000px : 640px, parent.width - 32px);
-            height: min(root.detail-large ? 760px : 440px, parent.height - 32px);
-            x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
-            background: Theme.panel; border-radius: 8px; border-width: 1px; border-color: Theme.border;
+            width: min(root.detail-large ? 1000px : 760px, parent.width - 32px);
+            height: min(root.detail-large ? 760px : (root.detail-page == 1 ? 452px : 500px), parent.height - 32px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: Theme.panel;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border;
+            drop-shadow-blur: 24px;
+            drop-shadow-offset-y: 8px;
+            drop-shadow-color: Theme.shadow;
+            clip: true;
             TouchArea { }
             VerticalLayout {
-                padding: 16px; spacing: 12px;
-                HorizontalLayout {
-                    Text { text: root.detail-page == 1 ? (I18n.en ? "Runtime diagnostics" : "运行诊断") : root.detail-page == 2 ? (I18n.en ? "Filter guide" : "筛选说明与状态") : (I18n.en ? "Release notes " : "完整更新内容 ") + root.update-version; color: Theme.text; font-weight: 700; }
-                    Rectangle { horizontal-stretch: 1; }
-                    TBtn { boxed: true; text: root.detail-large ? (I18n.en ? "Compact" : "缩小") : (I18n.en ? "Expand" : "放大"); clicked => { root.detail-large = !root.detail-large; } }
-                    TBtn { boxed: true; text: I18n.en ? "Close" : "关闭"; clicked => { root.detail-page = 0; } }
+                spacing: 0px;
+                Rectangle {
+                    height: 74px;
+                    background: #00000000;
+                    Rectangle {
+                        x: 3px; y: 14px; width: 4px; height: parent.height - 28px;
+                        border-radius: 2px;
+                        background: root.detail-page == 1 ? Theme.accent : root.detail-page == 3 ? Theme.ok : Theme.warn;
+                    }
+                    Rectangle { x: 0px; y: parent.height - 1px; width: parent.width; height: 1px; background: Theme.border; }
+                    HorizontalLayout {
+                        padding-left: 20px; padding-right: 16px; spacing: 12px;
+                        Rectangle {
+                            width: 38px; height: 38px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: 10px;
+                            background: (root.detail-page == 1 ? Theme.accent : root.detail-page == 3 ? Theme.ok : Theme.warn).with-alpha(0.14);
+                            Icon {
+                                width: 21px; height: 21px;
+                                x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                                name: root.detail-page == 1 ? "info" : root.detail-page == 3 ? "info" : "filter";
+                                clr: root.detail-page == 1 ? Theme.accent : root.detail-page == 3 ? Theme.ok : Theme.warn;
+                            }
+                        }
+                        VerticalLayout {
+                            padding-top: 15px; padding-bottom: 13px; spacing: 2px;
+                            Text {
+                                text: root.detail-page == 1 ? (I18n.en ? "Runtime diagnostics" : "运行诊断") : root.detail-page == 2 ? (I18n.en ? "Filter guide" : "筛选说明与状态") : (I18n.en ? "Release notes " : "完整更新内容 ") + root.update-version;
+                                color: Theme.text; font-size: 17px; font-weight: 800; vertical-alignment: center;
+                            }
+                            Text {
+                                text: root.detail-page == 1 ? (I18n.en ? "Live queues, rendering and hardware health" : "实时队列、渲染与硬件运行状态") : root.detail-page == 2 ? (I18n.en ? "Filter syntax and current capture options" : "筛选语法与当前采集选项") : (I18n.en ? "Changes and download information" : "版本变更与下载信息");
+                                color: Theme.text-dim; font-size: Theme.fs-sm; vertical-alignment: center;
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Rectangle {
+                            width: 86px; height: 28px; y: (parent.height - self.height) / 2;
+                            border-radius: 14px;
+                            background: (root.detail-page == 1 ? Theme.accent : root.detail-page == 3 ? Theme.ok : Theme.warn).with-alpha(0.12);
+                            Text {
+                                text: root.detail-page == 1 ? (root.capture-loss ? (I18n.en ? "Attention" : "需关注") : (I18n.en ? "Live" : "实时")) : root.detail-page == 3 ? ("v" + root.update-version) : (I18n.en ? "Guide" : "说明");
+                                color: root.detail-page == 1 ? (root.capture-loss ? Theme.warn : Theme.accent) : root.detail-page == 3 ? Theme.ok : Theme.warn;
+                                font-size: Theme.fs-sm; font-weight: 700; horizontal-alignment: center; vertical-alignment: center;
+                            }
+                        }
+                    }
                 }
-                detail-scroll := ScrollView {
-                    content-width: self.visible-width;
+                if root.detail-page == 1: Rectangle {
+                    vertical-stretch: 1;
+                    background: #00000000;
                     VerticalLayout {
-                        width: detail-scroll.visible-width; padding: 8px; spacing: 12px;
-                        Text {
-                            text: root.detail-page == 1 ? root.capture-health : root.detail-page == 3 ? root.update-notes : (I18n.en
+                        padding-left: 20px; padding-right: 20px; padding-top: 16px; padding-bottom: 16px; spacing: 10px;
+                        HorizontalLayout {
+                            spacing: 10px;
+                            DiagnosticCard {
+                                title: I18n.en ? "Performance" : "界面性能";
+                                HorizontalLayout {
+                                    spacing: 7px;
+                                    DiagnosticMetricTile { label: I18n.en ? "UI current / peak" : "UI 当前 / 峰值"; value: root.diag-ui-latency; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Table current / peak" : "表格 当前 / 峰值"; value: root.diag-table-latency; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Updated rows" : "本次更新行"; value: root.diag-updated-rows; }
+                                }
+                                HorizontalLayout {
+                                    spacing: 7px;
+                                    DiagnosticMetricTile { label: I18n.en ? "Frame rate" : "界面帧率"; value: root.fps + " FPS"; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Bus load" : "总线负载"; value: root.bus-load; alert: root.load-high; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Shown / total" : "显示 / 总数"; value: root.shown-count + " / " + root.total-count; }
+                                }
+                            }
+                            DiagnosticCard {
+                                title: I18n.en ? "Receive and hardware" : "接收队列与硬件";
+                                HorizontalLayout {
+                                    spacing: 7px;
+                                    DiagnosticMetricTile { label: I18n.en ? "Queue" : "队列 / 容量"; value: root.diag-rx-queue; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Peak" : "队列峰值"; value: root.diag-rx-peak; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Dropped" : "接收丢帧"; value: root.diag-rx-drops; alert: root.diag-rx-drops != "0"; }
+                                }
+                                HorizontalLayout {
+                                    spacing: 7px;
+                                    DiagnosticMetricTile { label: I18n.en ? "Overruns" : "硬件溢出"; value: root.diag-hardware-overruns; alert: root.diag-hardware-overruns != "0"; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Errors" : "硬件错误"; value: root.diag-hardware-errors; alert: root.diag-hardware-errors != "0"; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Capture status" : "采集状态"; value: root.capture-loss ? (I18n.en ? "Attention" : "需关注") : (I18n.en ? "Healthy" : "正常"); alert: root.capture-loss; }
+                                }
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 10px;
+                            DiagnosticCard {
+                                title: I18n.en ? "Command and recording" : "命令与记录队列";
+                                HorizontalLayout {
+                                    spacing: 7px;
+                                    DiagnosticMetricTile { label: I18n.en ? "Command queue" : "命令队列"; value: root.diag-command-queue; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Peak" : "命令峰值"; value: root.diag-command-peak; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Rejected" : "命令拒绝"; value: root.diag-command-rejected; alert: root.diag-command-rejected != "0"; }
+                                }
+                                HorizontalLayout {
+                                    spacing: 7px;
+                                    DiagnosticMetricTile { label: I18n.en ? "Record queue" : "记录队列"; value: root.diag-record-queue; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Peak" : "记录峰值"; value: root.diag-record-peak; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Dropped" : "记录丢帧"; value: root.diag-record-drops; alert: root.diag-record-drops != "0"; }
+                                }
+                            }
+                            DiagnosticCard {
+                                title: I18n.en ? "Timestamp quality" : "时间戳质量";
+                                HorizontalLayout {
+                                    spacing: 7px;
+                                    DiagnosticMetricTile { label: I18n.en ? "Samples" : "样本数量"; value: root.diag-time-samples; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Jitter current / peak" : "抖动 当前 / 峰值"; value: root.diag-time-jitter; }
+                                    Rectangle { min-width: 0px; preferred-width: 0px; horizontal-stretch: 1; }
+                                }
+                                HorizontalLayout {
+                                    spacing: 7px;
+                                    DiagnosticMetricTile { label: I18n.en ? "Drift" : "时钟漂移"; value: root.diag-time-drift; }
+                                    DiagnosticMetricTile { label: I18n.en ? "Non-monotonic" : "非单调次数"; value: root.diag-time-nonmonotonic; alert: root.diag-time-nonmonotonic != "0"; }
+                                    Rectangle { min-width: 0px; preferred-width: 0px; horizontal-stretch: 1; }
+                                }
+                            }
+                        }
+                    }
+                }
+                if root.detail-page != 1: Rectangle {
+                    vertical-stretch: 1;
+                    background: Theme.bg;
+                    VerticalLayout {
+                        padding-left: 20px; padding-right: 20px; padding-top: 18px; padding-bottom: 18px;
+                        Rectangle {
+                            background: Theme.panel;
+                            border-width: 1px; border-color: Theme.border; border-radius: 10px;
+                            detail-scroll := ScrollView {
+                                x: 1px; y: 1px; width: parent.width - 2px; height: parent.height - 2px;
+                                content-width: self.visible-width;
+                                VerticalLayout {
+                                    width: detail-scroll.visible-width;
+                                    padding-left: 18px; padding-right: 18px; padding-top: 16px; padding-bottom: 16px;
+                                    Text {
+                                        text: root.detail-page == 3 ? root.update-notes : (I18n.en
                                 ? "ID is hexadecimal: 180 matches one ID; 100-1FF matches a range; separate terms with commas; !200 excludes ID 200. Empty means all.\n\nName matches a substring; BMS* matches a prefix, *BMS a suffix, !BMS excludes.\n\nData matches consecutive hex bytes, e.g. 01 02. Separate bytes with spaces. This is a filter, not a frame editor.\n\nID, Name, Data and Direction are applied together. Invalid input leaves the active filter unchanged.\n\nLog Error Frames captures PCAN hardware error frames and ZLG channel faults. Log Error Counter Changes records RXErr/TXErr changes separately. Both options also control file recording and are enabled by default.\n\nTrace 300/750/1500 selects the displayed rolling window only; capture and recording are unchanged. Disable auto-scroll to inspect a stable view.\n\nStatus: "
                                 : "ID 按十六进制填写：180 匹配单个 ID；100-1FF 匹配范围；逗号分隔多个条件；!200 排除 ID 200。留空匹配全部。\n\n名称按包含匹配；BMS* 匹配前缀，*BMS 匹配后缀，!BMS 排除名称。\n\nData 按连续字节匹配，例如 01 02，用空格分隔。这是筛选条件，不是报文编辑器。\n\nID、名称、Data 和方向一起点击“应用筛选”生效。输入有误时保留旧筛选，不会悄悄忽略错误。\n\n“记录错误帧”采集 PCAN 硬件错误帧及 ZLG 通道故障；“记录错误计数器变化”单独记录 RXErr/TXErr 变化。两项也控制文件记录，默认均开启。\n\nTrace 300/750/1500 仅控制实时显示窗口，不影响采集缓存与记录。关闭自动滚动后可稳定查看当前表格。\n\n当前状态：") + root.filter-feedback;
-                            wrap: word-wrap; color: Theme.text; font-size: Theme.fs;
+                                        wrap: word-wrap;
+                                        color: Theme.text;
+                                        font-family: Theme.sans;
+                                        font-size: Theme.fs;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Rectangle {
+                    height: 44px;
+                    background: #00000000;
+                    Rectangle { x: 0px; y: 0px; width: parent.width; height: 1px; background: Theme.border; }
+                    HorizontalLayout {
+                        padding-left: 20px; padding-right: 16px; spacing: 10px;
+                        Text {
+                            text: root.detail-page == 1 ? (I18n.en ? "Values refresh while this panel is open" : "面板打开期间数据持续刷新") : root.detail-page == 3 ? (I18n.en ? "Select a download source from the update notification" : "可从升级提示选择下载源") : (I18n.en ? "Press Esc to close" : "按 Esc 可关闭");
+                            color: Theme.text-dim; font-size: Theme.fs-sm; vertical-alignment: center;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Rectangle {
+                            width: 92px; vertical-stretch: 1;
+                            TBtn { y: (parent.height - self.height) / 2; width: parent.width; h: 30px; boxed: true; text: root.detail-large ? (I18n.en ? "Compact" : "缩小") : (I18n.en ? "Expand" : "放大"); clicked => { root.detail-large = !root.detail-large; } }
+                        }
+                        Rectangle {
+                            width: 92px; vertical-stretch: 1;
+                            TBtn { y: (parent.height - self.height) / 2; width: parent.width; h: 30px; primary: true; text: I18n.en ? "Close" : "关闭"; clicked => { root.detail-page = 0; } }
                         }
                     }
                 }

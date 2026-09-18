@@ -260,22 +260,6 @@ pub(super) fn validate_filter(id_s: &str, data_s: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(test)]
-mod filter_validation_tests {
-    use super::*;
-    #[test]
-    fn validates_filter_without_silently_dropping_tokens() {
-        assert!(validate_filter("180,100-1FF,!200", "01 02 FF").is_ok());
-        assert!(validate_filter("", "").is_ok());
-        for id in ["GG", "180,", "!100-200", "20000000", "100-ZZ"] {
-            assert!(validate_filter(id, "").is_err(), "{id}");
-        }
-        for data in ["GG", "0102", "100", "01 zz"] {
-            assert!(validate_filter("180", data).is_err(), "{data}");
-        }
-    }
-}
-
 pub(super) fn parse_filter(id_s: &str, name_s: &str, data_s: &str) -> Filter {
     let mut f = Filter::default();
 
@@ -328,5 +312,22 @@ pub(super) fn parse_u32(s: &str) -> Option<u32> {
         u32::from_str_radix(h, 16).ok()
     } else {
         u32::from_str_radix(s, 16).ok()
+    }
+}
+
+#[cfg(test)]
+mod filter_validation_tests {
+    use super::*;
+
+    #[test]
+    fn validates_filter_without_silently_dropping_tokens() {
+        assert!(validate_filter("180,100-1FF,!200", "01 02 FF").is_ok());
+        assert!(validate_filter("", "").is_ok());
+        for id in ["GG", "180,", "!100-200", "20000000", "100-ZZ"] {
+            assert!(validate_filter(id, "").is_err(), "{id}");
+        }
+        for data in ["GG", "0102", "100", "01 zz"] {
+            assert!(validate_filter("180", data).is_err(), "{data}");
+        }
     }
 }

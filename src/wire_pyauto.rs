@@ -221,20 +221,22 @@ fn python_help_text() -> String {
     if let Ok(cwd) = std::env::current_dir() {
         candidates.push(cwd.join("templates").join("help.py"));
     }
-    if let Ok(executable) = std::env::current_exe() {
-        if let Some(workspace) = executable
+    if let Some(workspace) = std::env::current_exe().ok().and_then(|executable| {
+        executable
             .parent()
             .and_then(std::path::Path::parent)
             .and_then(std::path::Path::parent)
-        {
-            candidates.push(workspace.join("templates").join("help.py"));
-        }
+            .map(std::path::Path::to_owned)
+    })
+    {
+        candidates.push(workspace.join("templates").join("help.py"));
     }
     for path in candidates {
-        if let Ok(source) = std::fs::read_to_string(path) {
-            if let Some(help) = extract_help_doc(&source) {
-                return help;
-            }
+        if let Some(help) = std::fs::read_to_string(path)
+            .ok()
+            .and_then(|source| extract_help_doc(&source))
+        {
+            return help;
         }
     }
     "未找到 templates\\help.py，请重新安装完整的 PCAN-Explorer10 安装包。".to_string()
