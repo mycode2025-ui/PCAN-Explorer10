@@ -513,13 +513,7 @@ export component AppWindow inherits Window {
                         TBtn { boxed: true; text: I18n.en ? "Columns" : "列设置"; active: root.col-panel-visible; clicked => { root.col-panel-visible = !root.col-panel-visible; } }
                         if root.mode-trace: ComboBox { width: 110px; model: ["Trace 300", "Trace 750", "Trace 1500"]; current-index <=> root.trace-window; }
                         TBtn { text: I18n.en ? "Filter guide" : "筛选说明"; clicked => { root.detail-page = 2; } }
-                        Text { text: root.filter-feedback; color: root.filter-invalid ? Theme.bad : Theme.text-dim; font-size: Theme.fs-sm; vertical-alignment: center; }
-                    } }
-                }
-                Rectangle {
-                    height: Theme.ctrl-h + 10px; background: Theme.panel2;
-                    ScrollView { HorizontalLayout {
-                        padding: 4px; spacing: 3px; alignment: start;
+                        Rectangle { width: 1px; background: Theme.border; }
                         Text { text: "ID:"; vertical-alignment: center; font-size: Theme.fs; }
                         LineEdit { width: 110px; height: Theme.ctrl-h; placeholder-text: "180 / 100-1FF"; text <=> root.f-id; accepted => { root.apply-filter(); } }
                         Text { text: I18n.en ? "Name:" : "名称:"; vertical-alignment: center; font-size: Theme.fs; }
@@ -547,6 +541,7 @@ export component AppWindow inherits Window {
                             checked: root.log-error-counter-changes;
                             toggled => { root.log-error-counter-changes = self.checked; root.set-error-logging(root.log-error-frames, root.log-error-counter-changes); }
                         }
+                        Text { text: root.filter-feedback; color: root.filter-invalid ? Theme.bad : Theme.text-dim; font-size: Theme.fs-sm; vertical-alignment: center; }
                     } }
                 }
 
