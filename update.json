@@ -3,7 +3,7 @@
   "version": "0.7.1",
   "published_at": "2026-09-18T07:58:00Z",
   "notes": "PCAN-Explorer10 v0.7.1 更新：\n- 重构运行诊断面板，实时展示界面、队列、硬件、记录与时间戳质量指标。\n- 统一诊断弹窗和升级提示的圆角、卡片、间距及按钮布局。\n- 将运行诊断固定到状态栏最右侧并保持垂直居中。\n- 缩短弹窗过渡，修正强调竖条与圆角边框越界，并适配 Rust 1.95 静态检查。",
-  "release_notes": "https://www.hexbyte.cn/release-notes-0.7.1.html",
+  "release_notes": "https://www.hexbyte.cn/#release",
   "sha256": "508F3506C1F6F38E79973D2184DE958A8892C6479E8A84A301CA1A4022224A93",
   "downloads": {
     "github": "https://github.com/mycode2025-ui/PCAN-Explorer10/releases/download/v0.7.1/PCAN-Explorer10-Setup-0.7.1.exe",

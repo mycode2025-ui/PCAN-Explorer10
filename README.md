@@ -4,7 +4,7 @@
 
 面向汽车电子、储能、充电设备与工业通信研发测试，覆盖多厂商硬件接入、DBC 解析、报文采集与发送、记录回放、实时曲线、可视化仿真、printf-over-CAN、Modbus 与串口调试。
 
-[GitHub 下载 v0.7.1](https://github.com/mycode2025-ui/PCAN-Explorer10/releases/download/v0.7.1/PCAN-Explorer10-Setup-0.7.1.exe) · [Gitee 下载 v0.7.1](https://gitee.com/mycode2025-ui/PCAN-Explorer10/releases/download/v0.7.1/PCAN-Explorer10-Setup-0.7.1.exe) · [官方网站](https://www.hexbyte.cn) · [版本说明](https://www.hexbyte.cn/release-notes-0.7.1.html)
+[GitHub 下载 v0.7.1](https://github.com/mycode2025-ui/PCAN-Explorer10/releases/download/v0.7.1/PCAN-Explorer10-Setup-0.7.1.exe) · [Gitee 下载 v0.7.1](https://gitee.com/mycode2025-ui/PCAN-Explorer10/releases/download/v0.7.1/PCAN-Explorer10-Setup-0.7.1.exe) · [官方网站与版本说明](https://www.hexbyte.cn/#release)
 
 ![PCAN-Explorer10 v0.7.1 报文分析界面](site-assets/product/v071-trace.png)
 
