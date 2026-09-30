@@ -702,24 +702,28 @@ export component SimPropWindow inherits ThemedWindow {
                         }
                     }
                     Rectangle {
-                        height: 48px;
+                        height: Theme.ctrl-h + 20px;
                         background: Theme.panel2;
-                        HorizontalLayout {
+                        VerticalLayout {
+                            alignment: center;
                             padding-left: 10px;
                             padding-right: 10px;
-                            spacing: 8px;
-                            Text {
-                                text: I18n.en ? "Double-click a signal to bind it" : "双击信号即可绑定";
-                                color: Theme.text-dim;
-                                font-size: Theme.fs-sm;
-                                vertical-alignment: center;
-                                horizontal-stretch: 1;
-                            }
-                            TBtn { text: I18n.en ? "Cancel" : "取消"; clicked => { root.binding-tree-open = false; } }
-                            TBtn {
-                                text: I18n.en ? "Bind selected" : "绑定所选";
-                                primary: true;
-                                clicked => { root.binding-tree-choose(root.binding-tree-cursor); }
+                            HorizontalLayout {
+                                height: Theme.ctrl-h;
+                                spacing: 8px;
+                                Text {
+                                    text: I18n.en ? "Double-click a signal to bind it" : "双击信号即可绑定";
+                                    color: Theme.text-dim;
+                                    font-size: Theme.fs-sm;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
+                                TBtn { text: I18n.en ? "Cancel" : "取消"; clicked => { root.binding-tree-open = false; } }
+                                TBtn {
+                                    text: I18n.en ? "Bind selected" : "绑定所选";
+                                    primary: true;
+                                    clicked => { root.binding-tree-choose(root.binding-tree-cursor); }
+                                }
                             }
                         }
                     }

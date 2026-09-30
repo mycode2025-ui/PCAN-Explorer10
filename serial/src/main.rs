@@ -522,6 +522,19 @@ fn main() -> Result<()> {
     }
 
     {
+        let app = app.as_weak();
+        let session = Rc::clone(&session);
+        let writer = writer.clone();
+        app.unwrap().on_send_terminal_interrupt(move || {
+            if let Some(app) = app.upgrade() {
+                // Ctrl+C from a serial terminal is the ETX control byte, not a process signal.
+                send_bytes(&app, &session, &writer, vec![0x03]);
+                app.invoke_focus_terminal_input();
+            }
+        });
+    }
+
+    {
         let terminal_state = Rc::clone(&terminal_state);
         app.on_terminal_history(move |direction, current| {
             terminal_state
@@ -593,6 +606,15 @@ fn main() -> Result<()> {
                     Ok(bytes) => send_bytes(&app, &session, &writer, bytes),
                     Err(err) => append_notice(&app, &format!("多条发送内容无效: {err:#}")),
                 }
+            }
+        });
+    }
+
+    {
+        let app = app.as_weak();
+        quick.on_send_terminal_interrupt(move || {
+            if let Some(app) = app.upgrade() {
+                app.invoke_send_terminal_interrupt();
             }
         });
     }

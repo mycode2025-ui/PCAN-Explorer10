@@ -313,6 +313,12 @@ export component SimPanelWindow inherits ThemedWindow {
     property <string> signal-drag-name: "";
     property <length> signal-drag-x: 0px;
     property <length> signal-drag-y: 0px;
+    property <length> signal-library-panel-x: workspace.width - min(326px, workspace.width - 48px) - 12px;
+    property <length> signal-library-panel-y: 12px;
+    property <length> signal-library-drag-x: 0px;
+    property <length> signal-library-drag-y: 0px;
+    property <length> signal-library-drag-panel-x: 12px;
+    property <length> signal-library-drag-panel-y: 12px;
     changed dbc-count => {
         if root.signal-library-open { root.signal-library-refresh(); }
     }
@@ -504,7 +510,7 @@ export component SimPanelWindow inherits ThemedWindow {
                 Rectangle { width: 1px; background: Theme.border; }
                 TBtn {
                     boxed: true;
-                    btn-enabled: root.dbc-count > 0 && !root.running;
+                    btn-enabled: !root.running;
                     text: root.signal-library-open
                         ? (I18n.en ? "Hide signals" : "收起信号库")
                         : (I18n.en ? "DBC signals" : "DBC 信号库");
@@ -907,10 +913,10 @@ export component SimPanelWindow inherits ThemedWindow {
 
             if root.signal-library-open && !root.running: Rectangle {
                 z: 80;
-                x: 12px;
-                y: 12px;
+                x: max(12px, min(root.signal-library-panel-x, parent.width - self.width - 12px));
+                y: max(12px, min(root.signal-library-panel-y, parent.height - self.height - 12px));
                 width: min(326px, parent.width - 48px);
-                height: parent.height - 24px;
+                height: min(parent.height - 24px, 560px);
                 background: Theme.panel;
                 border-width: 1px;
                 border-color: Theme.border;
@@ -944,6 +950,31 @@ export component SimPanelWindow inherits ThemedWindow {
                             }
                             Rectangle { horizontal-stretch: 1; }
                             TBtn { text: "×"; clicked => { root.signal-library-open = false; } }
+                        }
+                        TouchArea {
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width - 44px;
+                            height: parent.height;
+                            mouse-cursor: move;
+                            pointer-event(event) => {
+                                if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                                    root.signal-library-drag-x = self.absolute-position.x + self.mouse-x - workspace.absolute-position.x;
+                                    root.signal-library-drag-y = self.absolute-position.y + self.mouse-y - workspace.absolute-position.y;
+                                    root.signal-library-drag-panel-x = root.signal-library-panel-x;
+                                    root.signal-library-drag-panel-y = root.signal-library-panel-y;
+                                }
+                            }
+                            moved => {
+                                if self.pressed {
+                                    root.signal-library-panel-x = root.signal-library-drag-panel-x
+                                        + self.absolute-position.x + self.mouse-x - workspace.absolute-position.x
+                                        - root.signal-library-drag-x;
+                                    root.signal-library-panel-y = root.signal-library-drag-panel-y
+                                        + self.absolute-position.y + self.mouse-y - workspace.absolute-position.y
+                                        - root.signal-library-drag-y;
+                                }
+                            }
                         }
                     }
                     Rectangle {
