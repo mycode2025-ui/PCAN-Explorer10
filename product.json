@@ -1,16 +1,16 @@
 {
   "name": "PCAN-Explorer10",
-  "version": "0.7.1",
-  "released_at": "2026-09-18T07:58:00Z",
+  "version": "0.7.6",
+  "released_at": "2026-09-30T03:20:44Z",
   "website": "https://www.hexbyte.cn/",
   "platform": "Windows 10/11 64-bit",
   "installer": {
-    "name": "PCAN-Explorer10-Setup-0.7.1.exe",
-    "size_bytes": 30642307,
-    "sha256": "508F3506C1F6F38E79973D2184DE958A8892C6479E8A84A301CA1A4022224A93",
+    "name": "PCAN-Explorer10-Setup-0.7.6.exe",
+    "size_bytes": 30654760,
+    "sha256": "E2F80B0FC9A02146EB6CE8BC4CB0D225EAE5FA8C6EC35D4F46A8822BC118A169",
     "signed": false,
-    "github": "https://github.com/mycode2025-ui/PCAN-Explorer10/releases/download/v0.7.1/PCAN-Explorer10-Setup-0.7.1.exe",
-    "gitee": "https://gitee.com/mycode2025-ui/PCAN-Explorer10/releases/download/v0.7.1/PCAN-Explorer10-Setup-0.7.1.exe"
+    "github": "https://github.com/mycode2025-ui/PCAN-Explorer10/releases/download/v0.7.6/PCAN-Explorer10-Setup-0.7.6.exe",
+    "gitee": "https://gitee.com/mycode2025-ui/PCAN-Explorer10/releases"
   },
   "hardware": [
     "PCAN (PEAK)",
@@ -28,5 +28,5 @@
     "Intel",
     "Motorola"
   ],
-  "verification": "PCAN-Explorer10, Serial Tool, Modbus Tools and the installer report version 0.7.1; formatting, three Slint UI syntax checks, UI render matrix, workspace tests and zero-warning Clippy audit passed. Installer size and SHA-256 were verified. The Authenticode signature is absent."
+  "verification": "GitHub v0.7.6 release reports MSVC ThinLTO Release build and 9 passed release checks. Installer size and SHA-256 match GitHub asset metadata. No Authenticode signature."
 }
